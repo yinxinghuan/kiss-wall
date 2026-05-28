@@ -21,11 +21,12 @@ import type { Kiss, KissWallSave, SealedStele } from '../types';
 import { clamp, describeDistribution, rand, uuidLike } from '../utils/format';
 import { initAudioOnce, playKiss } from '../utils/audio';
 
-const SEAL_MIN = 10;        // seal button unlocks at ≥ 10 kisses
-const REVEAL_TARGET = 30;   // approx kisses for full silhouette emerge
-const EROSION_PER_MISS = 0.03;  // silhouette opacity penalty per wrong tap
-const EROSION_CAP = 0.40;       // max erosion (so player can always recover)
-const SILHOUETTE_MAX_ALPHA = 0.55;
+const SEAL_MIN = 8;             // seal unlocks at ≥ 8 kisses (was 10)
+const REVEAL_TARGET = 15;       // approx kisses for full reveal (was 30)
+const REVEAL_EXPONENT = 0.9;    // gentler curve so early kisses show visible progress
+const EROSION_PER_MISS = 0.01;  // smaller opacity penalty (was 0.03)
+const EROSION_CAP = 0.25;       // tighter cap (was 0.40)
+const SILHOUETTE_MAX_ALPHA = 0.70;  // brighter target (was 0.55) — players need to SEE it
 const DEMO_POSITIONS: { nx: number; ny: number }[] = [
   { nx: 0.32, ny: 0.30 },
   { nx: 0.66, ny: 0.40 },
@@ -89,7 +90,7 @@ export function useKissWall(): UseKissWallReturn {
   const canSeal = realKissCount >= SEAL_MIN && !sealing;
   const silhouetteAlpha = Math.max(
     0,
-    Math.pow(Math.min(1, realKissCount / REVEAL_TARGET), 1.6) * SILHOUETTE_MAX_ALPHA - erosion,
+    Math.pow(Math.min(1, realKissCount / REVEAL_TARGET), REVEAL_EXPONENT) * SILHOUETTE_MAX_ALPHA - erosion,
   );
   const lifetime = {
     totalSealed: save.savedData?.totalSealed ?? 0,
@@ -131,40 +132,56 @@ export function useKissWall(): UseKissWallReturn {
     }
 
     // ── wrong tap path ─────────────────────────────────────────────────
+    // v2.6: NO MORE erasing existing kisses — too punishing, killed the
+    // exploration loop. Wrong taps still fade + bump erosion (tiny opacity
+    // penalty so the silhouette ghost recedes slightly) but you never LOSE
+    // a kiss you already placed.
     setMissCount(m => m + 1);
     setErosion(e => Math.min(EROSION_CAP, e + EROSION_PER_MISS));
-    let erasedId: string | null = null;
-    setKisses(prev => {
-      const perms = prev.filter(p => !p.isDemo && !p.transient && !p.erasing);
-      if (perms.length === 0) {
-        return [...prev, k];
-      }
-      const target = perms[Math.floor(Math.random() * perms.length)];
-      erasedId = target.id;
-      return prev
-        .map(p => (p.id === target.id ? { ...p, erasing: true } : p))
-        .concat(k);
-    });
+    setKisses(prev => [...prev, k]);
     setTimeout(() => {
-      setKisses(prev => prev.filter(x => x.id !== k.id && x.id !== erasedId));
+      setKisses(prev => prev.filter(x => x.id !== k.id));
     }, 700);
   }, [silhouetteMask]);
 
   // ── Intro demo loop — runs until first real touch ────────────────────────
+  // v2.6: demo positions are sampled from INSIDE the silhouette mask so the
+  // ghost finger always "lands a correct kiss" — teaching the player that
+  // (a) tapping leaves a mark and (b) the mark sticks only in certain places.
   useEffect(() => {
     if (firstTouched) return;
     let cancelled = false;
     let step = 0;
 
+    // Pick 4 demo positions that are guaranteed inside the silhouette. If
+    // the mask hasn't loaded yet, fall back to the static default centers.
+    function pickDemoPositions(): { nx: number; ny: number }[] {
+      if (!silhouetteMask.mask) return DEMO_POSITIONS;
+      const positions: { nx: number; ny: number }[] = [];
+      let attempts = 0;
+      while (positions.length < 4 && attempts < 200) {
+        attempts++;
+        const nx = 0.2 + Math.random() * 0.6;
+        const ny = 0.2 + Math.random() * 0.6;
+        if (silhouetteMask.hit(nx, ny)) {
+          // ensure positions are reasonably spread
+          const tooClose = positions.some(p =>
+            Math.hypot(p.nx - nx, p.ny - ny) < 0.18,
+          );
+          if (!tooClose) positions.push({ nx, ny });
+        }
+      }
+      return positions.length === 4 ? positions : DEMO_POSITIONS;
+    }
+    const demoPositions = pickDemoPositions();
+
     const tick = () => {
       if (cancelled || firstTouchedRef.current) return;
-      const pos = DEMO_POSITIONS[step % DEMO_POSITIONS.length];
+      const pos = demoPositions[step % demoPositions.length];
       setDemoFinger(pos);
       // show finger for ~450ms, then place the kiss (still demo)
       setTimeout(() => {
         if (cancelled || firstTouchedRef.current) return;
-        // place the demo kiss by faking a user tap into the same addKiss
-        // logic — but we want to ensure isDemo=true regardless of state
         const variant = Math.floor(Math.random() * LIP_COUNT);
         const k: Kiss = {
           id: uuidLike(),
@@ -194,7 +211,7 @@ export function useKissWall(): UseKissWallReturn {
     };
     const initial = setTimeout(tick, 600);
     return () => { cancelled = true; clearTimeout(initial); };
-  }, [firstTouched]);
+  }, [firstTouched, silhouetteMask.mask]);
 
   // ── Seal: ask LLM for epitaph, save the stele, append history ───────────
   const seal = useCallback(async (): Promise<SealedStele | null> => {

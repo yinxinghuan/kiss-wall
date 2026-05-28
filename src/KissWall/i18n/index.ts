@@ -12,7 +12,7 @@ const LOCALE: Locale = detectLocale();
 
 const STRINGS: Record<Locale, Record<string, string>> = {
   en: {
-    hint_tap: 'TAP THE STONE',
+    hint_tap: 'KISS THE DARK · SOMETHING HIDES',
     kisses_n: '{n} kisses',
     kisses_zero: 'kiss the stone',
     seal_cta: 'SEAL',
@@ -37,7 +37,7 @@ const STRINGS: Record<Locale, Record<string, string>> = {
     wings: 'wings',
   },
   zh: {
-    hint_tap: '吻这块碑',
+    hint_tap: '吻进黑暗 · 摸索藏在里面的形状',
     kisses_n: '{n} 个吻',
     kisses_zero: '吻这块碑',
     seal_cta: '封印',
