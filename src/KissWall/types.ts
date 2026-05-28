@@ -4,7 +4,7 @@ export type { SilhouetteId };
 
 export interface Kiss {
   id: string;
-  /** 0..1, relative to stele bounds (0,0 = top-left) */
+  /** 0..1, relative to silhouette/canvas bounds (0,0 = top-left) */
   nx: number;
   ny: number;
   variant: number;   // 0..5 lip variant
@@ -13,6 +13,12 @@ export interface Kiss {
   alpha: number;     // 0.7..1.0
   t: number;         // ms timestamp (perf)
   isDemo?: boolean;  // intro demo kiss, doesn't count
+  /** Transient kisses (tapped outside silhouette) fade out in ~0.6s and
+   *  are dropped from the kiss list. They never count toward seal/totals. */
+  transient?: boolean;
+  /** A previously-permanent kiss that's being erased as a penalty for a wrong
+   *  tap. Animates out then gets dropped, same lifetime as a transient. */
+  erasing?: boolean;
 }
 
 export interface SealedStele {

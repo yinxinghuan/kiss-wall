@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { SteleView } from './components/SteleView';
+import { DarkCanvas } from './components/DarkCanvas';
+import { FramingCard } from './components/FramingCard';
 import { WallView } from './components/WallView';
 import { useKissWall } from './hooks/useKissWall';
 import { installGlobalTapFeedback } from './utils/audio';
@@ -11,12 +12,14 @@ type Screen = 'stele' | 'wall';
 
 export default function KissWall() {
   const [screen, setScreen] = useState<Screen>('stele');
+  const [framingOpen, setFramingOpen] = useState(true);
   const {
     kisses, silhouette, firstTouched,
     demoFingerNx, demoFingerNy,
     addKiss,
     canSeal, sealing, seal, reset,
     lifetime, lastSealed, realKissCount,
+    silhouetteAlpha,
   } = useKissWall();
 
   // global tap feedback — one delegated listener, kiss surface opts out via data-no-feedback
@@ -29,9 +32,10 @@ export default function KissWall() {
     <div className="kw-app">
       {screen === 'stele' && (
         <div className="kw-screen kw-screen--stele">
-          <SteleView
+          <DarkCanvas
             kisses={kisses}
             silhouette={silhouette}
+            silhouetteAlpha={silhouetteAlpha}
             firstTouched={firstTouched}
             demoFingerNx={demoFingerNx}
             demoFingerNy={demoFingerNy}
@@ -95,6 +99,10 @@ export default function KissWall() {
 
       {screen === 'wall' && (
         <WallView onBack={() => setScreen('stele')} />
+      )}
+
+      {framingOpen && screen === 'stele' && (
+        <FramingCard onDismiss={() => setFramingOpen(false)} />
       )}
 
       <img

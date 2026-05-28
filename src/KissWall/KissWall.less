@@ -1,16 +1,15 @@
-// Kiss Wall — AlterU After Dark sensory toy.
-// Pink #F5B1C7 + black #07070a + Cormorant italic.
+// Kiss Wall v2 — pure black canvas, photoreal kisses, silhouette is the
+// (invisible) region where kisses stick. AlterU After Dark.
 
 @kw-pink: #f5b1c7;
 @kw-pink-strong: #d97a99;
 @kw-bone: #f0eedb;
 @kw-ink: #07070a;
-@kw-stone: #0e0e12;
 
 .kw-app {
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse at 50% 30%, #11111a 0%, #07070a 78%);
+  background: radial-gradient(ellipse at 50% 40%, #0d0d12 0%, #050507 78%);
   color: @kw-pink;
   overflow: hidden;
   display: flex;
@@ -24,55 +23,12 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 40px 18px 32px;
+  justify-content: flex-end;
+  padding: 0;
 }
 
-.kw-screen--stele {
-  justify-content: space-between;
-}
-
-// ───────── Stele ────────────────────────────────────────────────────────
-.kw-stele-wrap {
-  flex: 1 1 auto;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
-}
-
-.kw-stele {
-  position: relative;
-  aspect-ratio: 2 / 3;
-  width: 78%;
-  max-width: 320px;
-  max-height: calc(100vh - 220px);
-  margin: auto;
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow:
-    0 14px 40px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(245, 177, 199, 0.06),
-    inset 0 0 30px rgba(0, 0, 0, 0.55);
-}
-
-.kw-stele--mini {
-  width: 100%;
-  max-width: none;
-  max-height: none;
-  aspect-ratio: 2 / 3;
-}
-
-.kw-stele__shape {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-.kw-stele__hit {
+// ───────── DarkCanvas — the touch surface ──────────────────────────────
+.kw-canvas {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -81,13 +37,23 @@
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+  cursor: crosshair;
 }
 
-// ───────── Kiss decals ──────────────────────────────────────────────────
+// Silhouette ghost layer — photoreal PNG, opacity controlled by per-render `style`
+.kw-silhouette-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  transition: opacity 220ms ease-out;
+}
+
+// ───────── Kiss decals ─────────────────────────────────────────────────
 .kw-kiss {
   position: absolute;
-  width: 22%;
-  aspect-ratio: 100 / 60;
+  width: clamp(72px, 22vw, 150px);
   transform-origin: 50% 50%;
   transform:
     translate(-50%, -50%)
@@ -96,7 +62,14 @@
   opacity: var(--kw-alpha, 1);
   pointer-events: none;
   animation: kw-kiss-pop 280ms cubic-bezier(0.18, 0.9, 0.34, 1.05);
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(0 0 10px rgba(245, 177, 199, 0.18));
+}
+.kw-lip-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  pointer-events: none;
+  -webkit-user-drag: none;
 }
 
 .kw-kiss.is-demo {
@@ -104,8 +77,37 @@
   filter: blur(0.4px);
 }
 
+// Transient kisses (tapped outside silhouette) fade out then unmount
+.kw-kiss.is-transient {
+  animation: kw-kiss-fade 700ms ease-out forwards;
+}
+
+// Erasing kisses — a previously-permanent kiss being wiped as the penalty
+// for a wrong tap. Starts fully visible, scales up + fades to 0 with a slight
+// hue shift toward smudge.
+.kw-kiss.is-erasing {
+  animation: kw-kiss-erase 700ms ease-out forwards;
+  filter: drop-shadow(0 0 14px rgba(80, 8, 28, 0.5));
+}
+@keyframes kw-kiss-erase {
+  0% {
+    opacity: var(--kw-alpha, 1);
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--kw-rot, 0deg))
+      scale(var(--kw-scale, 1));
+  }
+  100% {
+    opacity: 0;
+    transform:
+      translate(-50%, -50%)
+      rotate(calc(var(--kw-rot, 0deg) + 10deg))
+      scale(calc(var(--kw-scale, 1) * 1.35));
+  }
+}
+
 .kw-kiss--mini {
-  width: 16%;
+  width: 22%;
   animation: none;
 }
 
@@ -133,7 +135,31 @@
   }
 }
 
-// ───────── Demo ghost finger ────────────────────────────────────────────
+@keyframes kw-kiss-fade {
+  0% {
+    opacity: 0;
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--kw-rot, 0deg))
+      scale(calc(var(--kw-scale, 1) * 0.5));
+  }
+  25% {
+    opacity: calc(var(--kw-alpha, 1) * 0.85);
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--kw-rot, 0deg))
+      scale(calc(var(--kw-scale, 1) * 1.1));
+  }
+  100% {
+    opacity: 0;
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--kw-rot, 0deg))
+      scale(calc(var(--kw-scale, 1) * 1.05));
+  }
+}
+
+// ───────── Demo ghost finger ───────────────────────────────────────────
 .kw-finger {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -146,7 +172,6 @@
     drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
   animation: kw-finger-pulse 1.4s ease-in-out infinite;
 }
-
 @keyframes kw-finger-pulse {
   0%, 100% { transform: translate(-50%, -50%) scale(0.94); }
   50%      { transform: translate(-50%, -50%) scale(1.06); }
@@ -157,7 +182,7 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, calc(-50% + 64px));
+  transform: translate(-50%, calc(-50% + 80px));
   font-family: 'Montserrat', system-ui, sans-serif;
   font-size: 10.5px;
   letter-spacing: 0.42em;
@@ -168,56 +193,61 @@
   pointer-events: none;
   white-space: nowrap;
 }
-
 @keyframes kw-hint-pulse {
   0%, 100% { opacity: 0.45; }
   50%      { opacity: 1; }
 }
 
-// ───────── Epitaph engraving ────────────────────────────────────────────
+// ───────── Epitaph engraving ───────────────────────────────────────────
 .kw-epitaph {
   position: absolute;
-  left: 6%;
-  right: 6%;
-  bottom: 6%;
+  left: 8%;
+  right: 8%;
+  bottom: 138px;
   font-family: 'Cormorant Garamond', 'Times New Roman', serif;
   font-style: italic;
   font-weight: 500;
-  font-size: clamp(13px, 3.4vw, 18px);
+  font-size: clamp(14px, 4vw, 19px);
   line-height: 1.32;
   color: @kw-pink;
   text-align: center;
   letter-spacing: 0.01em;
   text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.6),
-    0 0 14px rgba(245, 177, 199, 0.15);
+    0 1px 2px rgba(0, 0, 0, 0.7),
+    0 0 14px rgba(245, 177, 199, 0.18);
   opacity: 0;
   animation: kw-epitaph-engrave 1.4s ease-out 0.2s forwards;
   pointer-events: none;
 }
-
 .kw-epitaph--mini {
+  position: static;
   font-size: 9px;
   opacity: 1;
   animation: none;
   line-height: 1.2;
+  padding: 4px 6px;
+  color: rgba(245, 177, 199, 0.85);
+  text-align: center;
 }
-
 @keyframes kw-epitaph-engrave {
   0%   { opacity: 0; letter-spacing: 0.18em; filter: blur(2px); }
   100% { opacity: 1; letter-spacing: 0.01em; filter: blur(0); }
 }
 
-// ───────── HUD ──────────────────────────────────────────────────────────
+// ───────── HUD ─────────────────────────────────────────────────────────
 .kw-hud {
-  flex: 0 0 auto;
-  width: 100%;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 14px 18px 22px;
   pointer-events: none;
+  z-index: 10;
+  background: linear-gradient(180deg, rgba(7, 7, 10, 0) 0%, rgba(7, 7, 10, 0.75) 60%, rgba(7, 7, 10, 0.92) 100%);
 }
 
 .kw-hud__title {
@@ -227,7 +257,6 @@
   text-transform: uppercase;
   color: rgba(245, 177, 199, 0.65);
 }
-
 .kw-hud__count {
   font-family: 'Cormorant Garamond', serif;
   font-style: italic;
@@ -236,7 +265,6 @@
   color: @kw-bone;
   letter-spacing: 0.02em;
 }
-
 .kw-hud__actions {
   display: flex;
   gap: 12px;
@@ -265,20 +293,17 @@
 }
 .kw-btn:active { transform: scale(0.97); }
 .kw-btn:disabled { opacity: 0.4; pointer-events: none; }
-
 .kw-btn--seal {
   background: @kw-pink;
   color: @kw-ink;
   border-color: @kw-pink;
   box-shadow: 0 8px 22px rgba(245, 177, 199, 0.28);
 }
-
 .kw-btn--ghost {
   background: transparent;
   color: rgba(245, 177, 199, 0.8);
   border-color: rgba(245, 177, 199, 0.32);
 }
-
 .kw-icon-btn {
   appearance: none;
   border: 1px solid rgba(245, 177, 199, 0.28);
@@ -295,13 +320,8 @@
   transition: transform 80ms ease, background 200ms ease;
 }
 .kw-icon-btn:active { transform: scale(0.93); }
-.kw-icon-btn--solo {
-  width: 42px;
-  height: 42px;
-}
-.kw-icon-btn--ghost {
-  visibility: hidden;
-}
+.kw-icon-btn--solo { width: 42px; height: 42px; }
+.kw-icon-btn--ghost { visibility: hidden; }
 
 // ───────── Sealing curtain ─────────────────────────────────────────────
 .kw-curtain {
@@ -336,12 +356,55 @@
 }
 .kw-curtain__dots span:nth-child(2) { animation-delay: 0.18s; }
 .kw-curtain__dots span:nth-child(3) { animation-delay: 0.36s; }
-
 @keyframes kw-dot {
   0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
   40%           { opacity: 1;    transform: translateY(-3px); }
 }
 @keyframes kw-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+// ───────── Framing card ────────────────────────────────────────────────
+.kw-framing {
+  position: absolute;
+  inset: 0;
+  background: rgba(7, 7, 10, 0.94);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  animation: kw-fade-in 380ms ease-out;
+}
+.kw-framing.is-closing {
+  animation: kw-fade-out 320ms ease-in forwards;
+}
+.kw-framing__inner {
+  text-align: center;
+  padding: 32px;
+  max-width: min(86vw, 420px);
+}
+.kw-framing__line {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(20px, 6vw, 28px);
+  line-height: 1.36;
+  color: @kw-bone;
+  letter-spacing: 0.01em;
+  margin: 4px 0;
+  white-space: nowrap;
+}
+.kw-framing__hint {
+  margin-top: 28px;
+  font-family: 'Montserrat', system-ui, sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: rgba(245, 177, 199, 0.55);
+  animation: kw-hint-pulse 2.2s ease-in-out infinite;
+}
+@keyframes kw-fade-out { from { opacity: 1; } to { opacity: 0; } }
 
 // ───────── Wall view ───────────────────────────────────────────────────
 .kw-wall {
@@ -354,7 +417,6 @@
   -webkit-overflow-scrolling: touch;
   background: radial-gradient(ellipse at 50% 0%, #14141d 0%, #07070a 70%);
 }
-
 .kw-wall__head {
   display: flex;
   align-items: center;
@@ -368,7 +430,6 @@
   text-transform: uppercase;
   color: rgba(245, 177, 199, 0.8);
 }
-
 .kw-wall__state {
   margin: 60px auto;
   font-family: 'Cormorant Garamond', serif;
@@ -377,7 +438,6 @@
   font-size: 16px;
   text-align: center;
 }
-
 .kw-wall__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -385,7 +445,7 @@
   width: 100%;
 }
 
-// ───────── Wall card ───────────────────────────────────────────────────
+// ───────── Wall card — same dark-canvas aesthetic, scaled down ─────────
 .kw-card {
   display: flex;
   flex-direction: column;
@@ -397,24 +457,22 @@
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: transform 120ms ease, background 200ms ease;
+  overflow: hidden;
 }
 .kw-card:active { transform: scale(0.98); }
-
-.kw-card__stele {
-  width: 100%;
+.kw-card__canvas {
   position: relative;
-}
-.kw-card__stele .kw-stele {
   width: 100%;
-  max-width: none;
-  max-height: none;
+  aspect-ratio: 2 / 3;
+  background: radial-gradient(ellipse at 50% 40%, #0d0d12 0%, #050507 78%);
+  border-radius: 8px;
+  overflow: hidden;
 }
 .kw-card__kisses {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
-
 .kw-card__author {
   display: flex;
   align-items: center;
@@ -430,9 +488,7 @@
   flex: 0 0 auto;
   object-fit: cover;
 }
-.kw-card__avatar--blank {
-  background: rgba(245, 177, 199, 0.12);
-}
+.kw-card__avatar--blank { background: rgba(245, 177, 199, 0.12); }
 .kw-card__meta {
   display: flex;
   flex-direction: column;
@@ -461,7 +517,7 @@
   right: 10px;
   width: 56px;
   height: auto;
-  opacity: 0.4;
+  opacity: 0.35;
   pointer-events: none;
   z-index: 30;
 }

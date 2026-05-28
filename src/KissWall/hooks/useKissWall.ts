@@ -11,14 +11,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChat } from '@shared/runtime/useChat';
 import { useGameEvent } from '@shared/runtime/useGameEvent';
 import { useGameSave } from '@shared/save';
-import { pickSilhouette, type SilhouetteId } from '../assets/silhouettes';
+import {
+  pickSilhouette,
+  useSilhouetteMask,
+  type SilhouetteId,
+} from '../assets/silhouettes';
 import { LIP_COUNT } from '../assets/lips';
 import type { Kiss, KissWallSave, SealedStele } from '../types';
 import { clamp, describeDistribution, rand, uuidLike } from '../utils/format';
 import { initAudioOnce, playKiss } from '../utils/audio';
 
 const SEAL_MIN = 10;        // seal button unlocks at ≥ 10 kisses
-const REVEAL_TARGET = 28;   // approx kisses for full silhouette emerge
+const REVEAL_TARGET = 30;   // approx kisses for full silhouette emerge
+const EROSION_PER_MISS = 0.03;  // silhouette opacity penalty per wrong tap
+const EROSION_CAP = 0.40;       // max erosion (so player can always recover)
+const SILHOUETTE_MAX_ALPHA = 0.55;
 const DEMO_POSITIONS: { nx: number; ny: number }[] = [
   { nx: 0.32, ny: 0.30 },
   { nx: 0.66, ny: 0.40 },
@@ -33,10 +40,18 @@ interface UseKissWallReturn {
   kisses: Kiss[];
   silhouette: SilhouetteId;
   realKissCount: number;
+  /** Continuous 0..MAX silhouette opacity (= (n/30)^1.6 × 0.55 − erosion). */
+  silhouetteAlpha: number;
+  /** Number of wrong taps so far — drives erosion + post-seal grading. */
+  missCount: number;
   firstTouched: boolean;
   // ghost-finger demo position (null when not showing)
   demoFingerNx: number | null;
   demoFingerNy: number | null;
+  /** True once the silhouette alpha mask has loaded — until then taps fall
+   *  outside (all transient). Tiny window (<50ms) but blocks misclassification
+   *  of an early tap as "outside". */
+  maskReady: boolean;
   // actions
   addKiss: (nx: number, ny: number) => void;
   // sealing
@@ -57,7 +72,10 @@ export function useKissWall(): UseKissWallReturn {
   const [sealing, setSealing] = useState(false);
   const [lastSealed, setLastSealed] = useState<SealedStele | null>(null);
   const [demoFinger, setDemoFinger] = useState<{ nx: number; ny: number } | null>(null);
+  const [erosion, setErosion] = useState(0);
+  const [missCount, setMissCount] = useState(0);
   const firstTouchedRef = useRef(false);
+  const silhouetteMask = useSilhouetteMask(silhouette);
 
   const chat = useChat({
     system:
@@ -66,40 +84,71 @@ export function useKissWall(): UseKissWallReturn {
   const event = useGameEvent();
   const save = useGameSave<KissWallSave>('kiss-wall');
 
-  const realKisses = kisses.filter(k => !k.isDemo);
+  const realKisses = kisses.filter(k => !k.isDemo && !k.transient && !k.erasing);
   const realKissCount = realKisses.length;
   const canSeal = realKissCount >= SEAL_MIN && !sealing;
+  const silhouetteAlpha = Math.max(
+    0,
+    Math.pow(Math.min(1, realKissCount / REVEAL_TARGET), 1.6) * SILHOUETTE_MAX_ALPHA - erosion,
+  );
   const lifetime = {
     totalSealed: save.savedData?.totalSealed ?? 0,
     totalKisses: save.savedData?.totalKisses ?? 0,
   };
 
-  // ── Add a kiss — addKiss is ONLY for real user taps; the demo loop pushes
-  //    its own isDemo kisses directly into state.
+  // ── Add a kiss. Hit-test against the silhouette mask:
+  //   - inside  → permanent kiss (counts toward seal/totals)
+  //   - outside → transient kiss (mwah, fades after 0.6s) AND erases a random
+  //               existing permanent kiss + bumps erosion (silhouette opacity
+  //               penalty). "be intentional about who you kiss in the dark."
   const addKiss = useCallback((nx: number, ny: number) => {
     initAudioOnce();
     if (!firstTouchedRef.current) {
       firstTouchedRef.current = true;
       setFirstTouched(true);
-      // sweep any demo kisses left on the stele + drop ghost finger
       setKisses(k => k.filter(x => !x.isDemo));
       setDemoFinger(null);
     }
     const variant = Math.floor(Math.random() * LIP_COUNT);
+    const inside = silhouetteMask.hit(nx, ny);
     const k: Kiss = {
       id: uuidLike(),
-      nx: clamp(nx, 0.04, 0.96),
-      ny: clamp(ny, 0.04, 0.96),
+      nx: clamp(nx, 0.0, 1.0),
+      ny: clamp(ny, 0.0, 1.0),
       variant,
       rot: rand(-16, 16),
       scale: rand(0.78, 1.12),
-      alpha: rand(0.78, 1.0),
+      alpha: rand(0.82, 1.0),
       t: performance.now(),
       isDemo: false,
+      transient: !inside,
     };
-    setKisses(prev => [...prev, k]);
     playKiss(variant);
-  }, []);
+
+    if (inside) {
+      setKisses(prev => [...prev, k]);
+      return;
+    }
+
+    // ── wrong tap path ─────────────────────────────────────────────────
+    setMissCount(m => m + 1);
+    setErosion(e => Math.min(EROSION_CAP, e + EROSION_PER_MISS));
+    let erasedId: string | null = null;
+    setKisses(prev => {
+      const perms = prev.filter(p => !p.isDemo && !p.transient && !p.erasing);
+      if (perms.length === 0) {
+        return [...prev, k];
+      }
+      const target = perms[Math.floor(Math.random() * perms.length)];
+      erasedId = target.id;
+      return prev
+        .map(p => (p.id === target.id ? { ...p, erasing: true } : p))
+        .concat(k);
+    });
+    setTimeout(() => {
+      setKisses(prev => prev.filter(x => x.id !== k.id && x.id !== erasedId));
+    }, 700);
+  }, [silhouetteMask]);
 
   // ── Intro demo loop — runs until first real touch ────────────────────────
   useEffect(() => {
@@ -204,6 +253,8 @@ write the epitaph.`;
     setKisses([]);
     setLastSealed(null);
     setSilhouette(pickSilhouette());
+    setErosion(0);
+    setMissCount(0);
     firstTouchedRef.current = false;
     setFirstTouched(false);
   }, []);
@@ -212,9 +263,12 @@ write the epitaph.`;
     kisses,
     silhouette,
     realKissCount,
+    silhouetteAlpha,
+    missCount,
     firstTouched,
     demoFingerNx: demoFinger?.nx ?? null,
     demoFingerNy: demoFinger?.ny ?? null,
+    maskReady: silhouetteMask.mask != null,
     addKiss,
     canSeal,
     sealing,
