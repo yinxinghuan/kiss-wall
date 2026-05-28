@@ -15,21 +15,23 @@
 
 const fs = require('fs');
 
+// Use the 3D photoreal lipstick PNGs (poster-lip-1..4) for visual impact.
+// These are the ORIGINAL gen-image outputs with glossy sculptural depth,
+// preserved separately from the in-game flat lips.
 const KISSES = [
   { x: 50, y: 22, r: 8,   s: 1.10, v: 1 },
-  { x: 41, y: 30, r: -10, s: 0.95, v: 3 },
-  { x: 59, y: 30, r: 6,   s: 1.00, v: 5 },
-  { x: 50, y: 39, r: -4,  s: 1.12, v: 2 },
-  { x: 41, y: 49, r: 12,  s: 0.92, v: 4 },
-  { x: 59, y: 49, r: -8,  s: 0.97, v: 6 },
-  { x: 50, y: 58, r: 5,   s: 1.05, v: 1 },
-  { x: 41, y: 67, r: -12, s: 0.90, v: 3 },
-  { x: 59, y: 67, r: 10,  s: 0.96, v: 2 },
-  { x: 50, y: 75, r: -3,  s: 1.02, v: 5 },
+  { x: 38, y: 32, r: -12, s: 0.95, v: 3 },
+  { x: 62, y: 32, r: 9,   s: 1.00, v: 4 },
+  { x: 50, y: 42, r: -3,  s: 1.15, v: 2 },
+  { x: 38, y: 54, r: 11,  s: 0.92, v: 4 },
+  { x: 62, y: 54, r: -8,  s: 0.97, v: 1 },
+  { x: 50, y: 64, r: 4,   s: 1.08, v: 3 },
+  { x: 38, y: 76, r: -13, s: 0.90, v: 2 },
+  { x: 62, y: 76, r: 10,  s: 0.96, v: 1 },
 ];
 
 const KISS_IMG = (k) => `
-  <img class="kiss" src="lip-${k.v}.png"
+  <img class="kiss" src="poster-lip-${k.v}.png"
        style="left:${k.x}%; top:${k.y}%; transform:translate(-50%,-50%) rotate(${k.r}deg) scale(${k.s});" />`;
 
 const HTML = `<!doctype html><html><head><meta charset=utf-8>
