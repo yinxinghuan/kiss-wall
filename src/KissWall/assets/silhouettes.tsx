@@ -79,7 +79,10 @@ const MASK_H = 300;
 async function loadSilhouetteMask(id: SilhouetteId): Promise<Uint8Array> {
   const src = silhouetteSrc(id);
   const img = new Image();
-  img.crossOrigin = 'anonymous';
+  // NOTE: do NOT set crossOrigin — silhouette PNGs are served from the same
+  // origin as the game; setting crossOrigin='anonymous' makes the browser
+  // require CORS headers on the response (which GH Pages doesn't add),
+  // causing the canvas to be tainted and getImageData() to throw.
   img.src = src;
   await new Promise<void>((resolve, reject) => {
     if (img.complete && img.naturalWidth > 0) return resolve();
@@ -92,7 +95,6 @@ async function loadSilhouetteMask(id: SilhouetteId): Promise<Uint8Array> {
   const ctx = canvas.getContext('2d');
   if (!ctx) return new Uint8Array(MASK_W * MASK_H);
   ctx.clearRect(0, 0, MASK_W, MASK_H);
-  // Draw scaled-to-fit (preserve aspect ratio inside the mask box)
   const iw = img.naturalWidth;
   const ih = img.naturalHeight;
   const scale = Math.min(MASK_W / iw, MASK_H / ih);
@@ -101,7 +103,23 @@ async function loadSilhouetteMask(id: SilhouetteId): Promise<Uint8Array> {
   const dx = (MASK_W - dw) / 2;
   const dy = (MASK_H - dh) / 2;
   ctx.drawImage(img, dx, dy, dw, dh);
-  const data = ctx.getImageData(0, 0, MASK_W, MASK_H).data;
+  let data: Uint8ClampedArray;
+  try {
+    data = ctx.getImageData(0, 0, MASK_W, MASK_H).data;
+  } catch (e) {
+    // If somehow the canvas is still tainted, fall back to a "permissive
+    // central oval" mask so the game stays playable rather than dead.
+    console.warn('silhouette mask getImageData failed, using fallback', e);
+    const mask = new Uint8Array(MASK_W * MASK_H);
+    for (let y = 0; y < MASK_H; y++) {
+      for (let x = 0; x < MASK_W; x++) {
+        const dx2 = (x - MASK_W / 2) / (MASK_W * 0.35);
+        const dy2 = (y - MASK_H / 2) / (MASK_H * 0.40);
+        if (dx2 * dx2 + dy2 * dy2 < 1) mask[y * MASK_W + x] = 255;
+      }
+    }
+    return mask;
+  }
   const mask = new Uint8Array(MASK_W * MASK_H);
   for (let i = 0; i < MASK_W * MASK_H; i++) mask[i] = data[i * 4 + 3];
   return mask;
