@@ -2,17 +2,21 @@ import { useEffect, useState } from 'react';
 import { DarkCanvas } from './components/DarkCanvas';
 import { FramingCard } from './components/FramingCard';
 import { WallView } from './components/WallView';
+import { SteleDetail } from './components/SteleDetail';
 import { useKissWall } from './hooks/useKissWall';
+import { isSelf } from './hooks/useWall';
 import { installGlobalTapFeedback } from './utils/audio';
 import { WallIcon } from './assets/icons';
 import { t } from './i18n';
+import type { WallEntry } from './types';
 import './KissWall.less';
 
-type Screen = 'stele' | 'wall';
+type Screen = 'stele' | 'wall' | 'stele-detail';
 
 export default function KissWall() {
   const [screen, setScreen] = useState<Screen>('stele');
   const [framingOpen, setFramingOpen] = useState(true);
+  const [detailEntry, setDetailEntry] = useState<WallEntry | null>(null);
   const {
     kisses, silhouette, firstTouched,
     demoFingerNx, demoFingerNy,
@@ -98,7 +102,24 @@ export default function KissWall() {
       )}
 
       {screen === 'wall' && (
-        <WallView onBack={() => setScreen('stele')} />
+        <WallView
+          onBack={() => setScreen('stele')}
+          onOpenDetail={(entry) => {
+            setDetailEntry(entry);
+            setScreen('stele-detail');
+          }}
+        />
+      )}
+
+      {screen === 'stele-detail' && detailEntry && (
+        <SteleDetail
+          entry={detailEntry}
+          isMine={isSelf(detailEntry)}
+          onBack={() => {
+            setScreen('wall');
+            setDetailEntry(null);
+          }}
+        />
       )}
 
       {framingOpen && screen === 'stele' && (

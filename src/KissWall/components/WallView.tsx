@@ -4,13 +4,15 @@ import { useWall, isSelf } from '../hooks/useWall';
 import { SteleCard } from './SteleCard';
 import { BackIcon } from '../assets/icons';
 import { openAigramProfile } from '@shared/runtime/bridge';
+import type { WallEntry } from '../types';
 import { t } from '../i18n';
 
 interface WallViewProps {
   onBack: () => void;
+  onOpenDetail: (entry: WallEntry) => void;
 }
 
-export function WallView({ onBack }: WallViewProps) {
+export function WallView({ onBack, onOpenDetail }: WallViewProps) {
   const { entries, loaded } = useWall();
 
   return (
@@ -37,6 +39,7 @@ export function WallView({ onBack }: WallViewProps) {
             stele={entry.stele}
             authorName={isSelf(entry) ? 'you' : entry.userName}
             authorAvatarUrl={entry.userAvatarUrl}
+            onClick={() => onOpenDetail(entry)}
             onAuthorClick={
               entry.userId && !isSelf(entry)
                 ? () => openAigramProfile(entry.userId)
