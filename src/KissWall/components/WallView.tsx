@@ -1,19 +1,43 @@
-// Cross-user wall view — last 6 sealed stelae from other players.
+// Cross-user wall view — recent sealed stelae merged across the
+// 6 most-recent users + the player's own history. The merge avoids
+// the "I sealed but my stele isn't on the wall yet" gap that the
+// debounced cloud save (~1s + RTT) opens.
 
+import { useMemo } from 'react';
 import { useWall, isSelf } from '../hooks/useWall';
 import { SteleCard } from './SteleCard';
 import { BackIcon } from '../assets/icons';
 import { openAigramProfile } from '@shared/runtime/bridge';
-import type { WallEntry } from '../types';
+import type { SealedStele, WallEntry } from '../types';
 import { t } from '../i18n';
 
 interface WallViewProps {
+  /** Player's own sealed steles — merged in to surface a just-
+   *  sealed stele before cloud sync catches up. */
+  mine?: SealedStele[];
   onBack: () => void;
   onOpenDetail: (entry: WallEntry) => void;
 }
 
-export function WallView({ onBack, onOpenDetail }: WallViewProps) {
-  const { entries, loaded } = useWall();
+export function WallView({ mine = [], onBack, onOpenDetail }: WallViewProps) {
+  const { entries: cloudEntries, loaded } = useWall();
+
+  // Optimistic merge — own steles first (newest sealedAt anchors
+  // them at the top), dedupe by stele.id with cloud, sort the union.
+  const entries: WallEntry[] = useMemo(() => {
+    const cloudIds = new Set(cloudEntries.map(e => e.stele.id));
+    const selfEntries: WallEntry[] = mine
+      .filter(s => !cloudIds.has(s.id))
+      .map(s => ({
+        userId: 'self',
+        userName: undefined,
+        userAvatarUrl: undefined,
+        stele: s,
+      }));
+    return [...selfEntries, ...cloudEntries].sort(
+      (a, b) => (b.stele.sealedAt ?? 0) - (a.stele.sealedAt ?? 0),
+    );
+  }, [cloudEntries, mine]);
 
   return (
     <div className="kw-wall">

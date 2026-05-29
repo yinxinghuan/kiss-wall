@@ -24,6 +24,7 @@ export default function KissWall() {
     canSeal, sealing, seal, reset,
     lifetime, lastSealed, realKissCount,
     silhouetteAlpha,
+    history,
   } = useKissWall();
 
   // global tap feedback — one delegated listener, kiss surface opts out via data-no-feedback
@@ -103,6 +104,7 @@ export default function KissWall() {
 
       {screen === 'wall' && (
         <WallView
+          mine={history}
           onBack={() => setScreen('stele')}
           onOpenDetail={(entry) => {
             setDetailEntry(entry);

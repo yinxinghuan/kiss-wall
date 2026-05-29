@@ -64,6 +64,10 @@ interface UseKissWallReturn {
   lifetime: { totalSealed: number; totalKisses: number };
   // most recent seal (for "share" follow-up)
   lastSealed: SealedStele | null;
+  /** Player's full sealed history (cap 10) — used by WallView to
+   *  optimistically merge own steles into the cloud wall before
+   *  the debounced cloud save reaches get/data/list. */
+  history: SealedStele[];
 }
 
 export function useKissWall(): UseKissWallReturn {
@@ -293,6 +297,7 @@ write the epitaph.`;
     reset,
     lifetime,
     lastSealed,
+    history: save.savedData?.history ?? [],
   };
 }
 
