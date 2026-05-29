@@ -31,10 +31,10 @@ USER_ID = "yin"
 REF_GH_URL = "https://raw.githubusercontent.com/yinxinghuan/kiss-wall/master/_refs/poster_lip_ref.png"
 
 PROMPTS = [
-    "ultra realistic close-up photo of a single cherry-red lipstick imprint pressed onto smooth dark paper, glossy 3D wax texture with sculptural volume, visible vertical lip lines as raised ridges, dramatic side lighting creating strong specular highlights and depth shadows, photoreal not render, very detailed, isolated single kiss mark, chroma key green background, studio lighting",
-    "macro photograph of a dark burgundy lipstick kiss mark on black paper, thick glossy waxy texture with strong 3D dimensional feel, lipstick wax forming raised ridges and sculptural depth, dramatic single key light from upper-left, photoreal, isolated single mark, chroma key green backdrop",
-    "high resolution photograph of a deep wine-red lipstick imprint with glossy plump 3D wax volume, lips pressed firmly leaving sculpted impression with visible depth and shine, dramatic chiaroscuro lighting, photoreal not 3d render, single isolated kiss mark, chroma key green background",
-    "ultra realistic photo of a vivid coral-pink lipstick kiss imprint with thick glossy wax ridges and dramatic dimensional 3D feel, sculptural volume, fine lip-line texture catching the light, dramatic side lighting, photoreal not render, isolated single mark, chroma key green background",
+    "extreme macro photograph of beautiful real human lips wearing dark cherry red lipstick, real skin texture with visible natural lip creases and fine wrinkles, soft natural lighting that shows the anatomical dimension of the lips, slightly parted, sensual and realistic, isolated lips against pure black background, photoreal portrait macro, NOT plastic, NOT 3D rendered, real photo of skin and lipstick",
+    "macro photograph of full sensual human lips with deep burgundy lipstick perfectly applied, real skin texture with subtle vertical lip wrinkles and fine pores, natural soft side lighting that brings out the anatomical depth of the lips themselves (not from plastic gloss), real human anatomy, isolated lips against pure black background, photoreal photography, NOT a 3D render, NOT plastic",
+    "extreme close-up real photograph of pouty human lips wearing matte wine-red lipstick, visible skin pores and fine vertical lip creases, the lips have natural three-dimensional shape through soft natural lighting on real skin, anatomical realism, isolated against pure black background, real macro photo not render, NOT plastic looking",
+    "macro portrait photograph of feminine lips with vivid coral-pink lipstick application, real skin texture with subtle creases, slightly parted, natural lighting catching the gentle anatomical dimension of soft human lips, photoreal anatomical depth without any plastic or shiny artificial effect, isolated lips against pure black background, real photo not render",
 ]
 
 
