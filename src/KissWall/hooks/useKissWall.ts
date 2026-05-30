@@ -89,6 +89,18 @@ export function useKissWall(): UseKissWallReturn {
   const event = useGameEvent();
   const save = useGameSave<KissWallSave>('kiss-wall');
 
+  // Local mirror — useGameSave.savedData does NOT update after persist(),
+  // so every seal read stale `save.savedData?.totalSealed` (still 0 after
+  // the first seal) and saved totalSealed: 1 again instead of N+1. The
+  // counters silently stopped advancing past 1, and history saved only
+  // the most recent seal. See feedback_useGameSave_local_mirror.md.
+  const [mirror, setMirror] = useState<KissWallSave | undefined>(undefined);
+  useEffect(() => {
+    if (mirror === undefined && save.savedData !== undefined) {
+      setMirror(save.savedData ?? { totalSealed: 0, totalKisses: 0, history: [] });
+    }
+  }, [save.savedData, mirror]);
+
   const realKisses = kisses.filter(k => !k.isDemo && !k.transient && !k.erasing);
   const realKissCount = realKisses.length;
   const canSeal = realKissCount >= SEAL_MIN && !sealing;
@@ -97,8 +109,8 @@ export function useKissWall(): UseKissWallReturn {
     Math.pow(Math.min(1, realKissCount / REVEAL_TARGET), REVEAL_EXPONENT) * SILHOUETTE_MAX_ALPHA - erosion,
   );
   const lifetime = {
-    totalSealed: save.savedData?.totalSealed ?? 0,
-    totalKisses: save.savedData?.totalKisses ?? 0,
+    totalSealed: mirror?.totalSealed ?? 0,
+    totalKisses: mirror?.totalKisses ?? 0,
   };
 
   // ── Add a kiss. Hit-test against the silhouette mask:
@@ -256,12 +268,15 @@ write the epitaph.`;
       kissCount: realKisses.length,
     };
     setLastSealed(sealed);
-    // persist save (cap history at 10 newest first)
+    // persist save (cap history at 10 newest first). Read from mirror —
+    // save.savedData is stale post-persist so consecutive seals would
+    // each see totalSealed:0 and overwrite history.
     const next: KissWallSave = {
-      totalSealed: (save.savedData?.totalSealed ?? 0) + 1,
-      totalKisses: (save.savedData?.totalKisses ?? 0) + realKisses.length,
-      history: [sealed, ...(save.savedData?.history ?? [])].slice(0, 10),
+      totalSealed: (mirror?.totalSealed ?? 0) + 1,
+      totalKisses: (mirror?.totalKisses ?? 0) + realKisses.length,
+      history: [sealed, ...(mirror?.history ?? [])].slice(0, 10),
     };
+    setMirror(next);
     save.persist(next);
     // platform event so the wall counts go up + others' walls refresh
     event.trigger('kiss_sealed', { silhouette, kisses: realKisses.length });
