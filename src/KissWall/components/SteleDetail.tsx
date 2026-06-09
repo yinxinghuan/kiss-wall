@@ -29,7 +29,27 @@ export function SteleDetail({ entry, isMine, onBack }: SteleDetailProps) {
   function toggle(kind: 'heart' | 'candle' | 'rose') {
     if (reactions[kind]) return;  // increment-only per platform contract
     setReactions(r => ({ ...r, [kind]: true }));
-    event.trigger(`reaction_${kind}`, { steleId: entry.stele.id });
+    // Attach a spec-compliant notify when honoring someone else's stele.
+    // Steles are rendered in DOM (silhouette SVG + lip stamps), so we
+    // have no raster asset to attach as ref_url — omit image (it's
+    // optional per spec). The notification falls back to game icon +
+    // platform avatar + text.
+    const tmpl =
+      kind === 'heart'  ? '{sender_name} mourned at your stele.' :
+      kind === 'candle' ? '{sender_name} sat with your stele.' :
+                          '{sender_name} laid a rose on your stele.';
+    const config = !isMine && entry.userId
+      ? {
+          actions: [
+            {
+              type: 'notify',
+              target_user_id: entry.userId,
+              message: { template: tmpl, variables: ['sender_name'] },
+            },
+          ],
+        }
+      : undefined;
+    event.trigger(`reaction_${kind}`, config);
   }
 
   return (
