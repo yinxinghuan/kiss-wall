@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DarkCanvas } from './components/DarkCanvas';
 import { WallView } from './components/WallView';
 import { SteleDetail } from './components/SteleDetail';
@@ -6,30 +6,32 @@ import { useKissWall, type KissBackContext } from './hooks/useKissWall';
 import { isSelf } from './hooks/useWall';
 import { installGlobalTapFeedback } from './utils/audio';
 import { WallIcon } from './assets/icons';
-import { Lip } from './assets/lips';
 import { t } from './i18n';
 import type { SealedStele, WallEntry } from './types';
 import './KissWall.less';
 
-type Screen = 'stele' | 'wall' | 'stele-detail' | 'kiss-back';
+type Screen = 'stele' | 'wall' | 'stele-detail';
+
+interface Flourish { id: string; nx: number; ny: number; line: string; }
+
+const FLOURISH_TTL_MS = 1800;
+const FLOURISH_MAX = 4;  // cap so the screen doesn't fill with text
 
 export default function KissWall() {
   const [screen, setScreen] = useState<Screen>('stele');
   const [detailEntry, setDetailEntry] = useState<WallEntry | null>(null);
-  /** Set when we open the kiss-back canvas. Drives the seal flow + the
-   *  backdrop image + the ghost kisses echoed under the player's. */
-  const [kissBack, setKissBack] = useState<KissBackContext | null>(null);
-  /** Cached parent kiss positions used as ghost echo in the kiss-back canvas. */
   const [parentKisses, setParentKisses] = useState<SealedStele['kisses']>([]);
+  const [flourishes, setFlourishes] = useState<Flourish[]>([]);
+  const flourishIdxRef = useRef(0);
 
   const {
-    kisses, silhouette, firstTouched,
-    demoFingerNx, demoFingerNy,
-    addKiss,
-    canSeal, sealing, sealStage, seal, reset,
-    lifetime, lastSealed, realKissCount,
-    silhouetteAlpha,
+    kisses, firstTouched,
+    addKiss, reset,
+    portraitUrl, bloomed, developing, failed, reachedTarget,
+    realKissCount,
+    lifetime, lastSealed,
     history,
+    kissBackParent, setKissBackParent,
   } = useKissWall();
 
   // global tap feedback — one delegated listener, kiss surface opts out via data-no-feedback
@@ -38,103 +40,115 @@ export default function KissWall() {
     return teardown;
   }, []);
 
+  // Spawn a flourish for every newly-arrived kiss. We diff against the
+  // previous length so we only emit one per addition.
+  const lastKissCountRef = useRef(0);
+  useEffect(() => {
+    if (kisses.length <= lastKissCountRef.current) {
+      lastKissCountRef.current = kisses.length;
+      return;
+    }
+    const last = kisses[kisses.length - 1];
+    lastKissCountRef.current = kisses.length;
+    if (!last || last.isDemo || last.transient || last.erasing) return;
+    if (bloomed) return;  // no flourish once the portrait is fully revealed
+    const pool = t('flourishes').split('|');
+    const line = pool[flourishIdxRef.current % pool.length];
+    flourishIdxRef.current += 1;
+    const id = `${last.id}-f`;
+    // Position the flourish slightly above the kiss so it floats up without
+    // covering the lipstick stamp.
+    const nx = Math.max(0.08, Math.min(0.92, last.nx));
+    const ny = Math.max(0.08, last.ny - 0.05);
+    setFlourishes(prev => {
+      const next = [...prev, { id, nx, ny, line }];
+      // cap
+      return next.length > FLOURISH_MAX ? next.slice(next.length - FLOURISH_MAX) : next;
+    });
+    const t1 = setTimeout(() => {
+      setFlourishes(prev => prev.filter(f => f.id !== id));
+    }, FLOURISH_TTL_MS);
+    return () => clearTimeout(t1);
+  }, [kisses, bloomed]);
+
   function openKissBack(entry: WallEntry) {
     if (isSelf(entry)) return;
-    setKissBack({
+    const parent: KissBackContext = {
       steleId: entry.stele.id,
       authorId: entry.userId,
       authorName: entry.userName,
       authorAvatarUrl: entry.userAvatarUrl,
       parentPortraitUrl: entry.stele.portraitUrl,
       parentSilhouette: entry.stele.silhouette,
-    });
+    };
     setParentKisses(entry.stele.kisses);
     reset();
-    setScreen('kiss-back');
-  }
-
-  async function doSeal() {
-    const sealed = await seal(kissBack ?? undefined);
-    if (!sealed) return;
-    // After a seal we land on the same screen — the just-sealed portrait
-    // gets revealed beneath the kiss cluster. The user can choose Again
-    // (new stele) or Wall (see it land + others'). For kiss-back, we also
-    // clear the parent context after the seal completes so re-tapping
-    // "Again" starts a fresh solo session.
+    setKissBackParent(parent);
+    setScreen('stele');
   }
 
   function onAgain() {
-    setKissBack(null);
+    setKissBackParent(null);
     setParentKisses([]);
+    setFlourishes([]);
+    flourishIdxRef.current = 0;
+    lastKissCountRef.current = 0;
     reset();
     setScreen('stele');
   }
 
-  // ── Solo stele OR kiss-back canvas — same surface, different props ──────
-  const isKissBack = screen === 'kiss-back';
-  const canvasSilhouette = kissBack?.parentSilhouette ?? silhouette;
-  const canvasBackdrop = isKissBack ? kissBack?.parentPortraitUrl ?? null : null;
+  const isKissBack = !!kissBackParent;
+  const hint = isKissBack ? t('hint_kissback') : t('hint_tap_v2');
+
+  // HUD: 3 states — empty (pre-touch) / counting (developing) / done (bloomed).
+  let hudTitle: string;
+  let hudCount: string;
+  if (bloomed && portraitUrl) {
+    hudTitle = t('portrait_label');
+    hudCount = t('portrait_label_n', { n: lastSealed?.kissCount ?? realKissCount });
+  } else if (isKissBack) {
+    hudTitle = `${t('kissing_back')} ${kissBackParent?.authorName ?? 'someone'}`;
+    hudCount = developing && reachedTarget
+      ? t('curtain_finishing')
+      : t('kisses_n', { n: realKissCount });
+  } else {
+    hudTitle = 'KISS · WALL';
+    hudCount = realKissCount === 0
+      ? (lifetime.totalKisses > 0 ? `${lifetime.totalKisses} ever` : '—')
+      : developing && reachedTarget
+        ? t('curtain_finishing')
+        : t('kisses_n', { n: realKissCount });
+  }
 
   return (
     <div className="kw-app">
-      {(screen === 'stele' || screen === 'kiss-back') && (
+      {screen === 'stele' && (
         <div className={`kw-screen kw-screen--stele${isKissBack ? ' kw-screen--kissback' : ''}`}>
           <DarkCanvas
             kisses={kisses}
-            silhouette={canvasSilhouette}
-            silhouetteAlpha={lastSealed?.portraitUrl ? 0 : silhouetteAlpha}
+            portraitUrl={portraitUrl}
+            bloomed={bloomed}
             firstTouched={firstTouched}
-            demoFingerNx={demoFingerNx}
-            demoFingerNy={demoFingerNy}
+            hint={hint}
             onTap={addKiss}
             epitaph={lastSealed?.epitaph ?? null}
-            backdropUrl={canvasBackdrop}
+            parentBackdropUrl={isKissBack ? kissBackParent?.parentPortraitUrl ?? null : null}
             ghostKisses={isKissBack ? parentKisses : undefined}
+            flourishes={flourishes}
           />
 
-          {/* Revealed AI portrait — replaces the dark canvas after seal */}
-          {lastSealed?.portraitUrl && (
-            <img
-              className="kw-reveal-portrait"
-              src={lastSealed.portraitUrl}
-              alt=""
-              draggable={false}
-            />
-          )}
-          {/* Gen-image failed — explicit visible state so the player doesn't
-              wonder why they're looking at the old silhouette. */}
-          {lastSealed && !lastSealed.portraitUrl && (
+          {/* Gen-image failed — visible state so the player isn't stuck. */}
+          {failed && bloomed && (
             <div className="kw-fail">{t('portrait_failed')}</div>
           )}
 
           {/* ─── HUD ───────────────────────────────────────────────────── */}
           <div className="kw-hud">
-            <div className="kw-hud__title">
-              {lastSealed?.portraitUrl
-                ? t('portrait_label')
-                : isKissBack
-                  ? `${t('kissing_back')} ${kissBack?.authorName ?? 'someone'}`
-                  : 'KISS · WALL'}
-            </div>
-            <div className="kw-hud__count">
-              {lastSealed?.portraitUrl
-                ? t('portrait_label_n', { n: lastSealed.kissCount })
-                : realKissCount === 0
-                  ? (lifetime.totalKisses > 0 ? `${lifetime.totalKisses} ever` : '—')
-                  : t('kisses_n', { n: realKissCount })}
-            </div>
+            <div className="kw-hud__title">{hudTitle}</div>
+            <div className="kw-hud__count">{hudCount}</div>
 
             <div className="kw-hud__actions">
-              {!lastSealed && canSeal && (
-                <button
-                  className="kw-btn kw-btn--seal"
-                  onClick={() => { void doSeal(); }}
-                  disabled={sealing}
-                >
-                  {isKissBack ? t('seal_kissback') : t('seal_cta')}
-                </button>
-              )}
-              {lastSealed && (
+              {bloomed && (
                 <>
                   <button className="kw-btn kw-btn--ghost" onClick={onAgain}>
                     {t('again')}
@@ -147,7 +161,7 @@ export default function KissWall() {
                   </button>
                 </>
               )}
-              {!lastSealed && !canSeal && (
+              {!bloomed && !firstTouched && (
                 <button
                   className="kw-icon-btn kw-icon-btn--solo"
                   onClick={() => setScreen('wall')}
@@ -158,50 +172,6 @@ export default function KissWall() {
               )}
             </div>
           </div>
-
-          {/* ─── Sealing curtain ──────────────────────────────────────── */}
-          {/* The player just tapped DEVELOP. For 5–8s we have to make them
-              feel a portrait is being CREATED FROM THEIR KISSES — not just
-              "loading…". So we lift their actual kiss marks off the canvas,
-              float them toward a heartbeat, and tell them what's happening. */}
-          {sealing && (
-            <div className="kw-curtain">
-              <div className="kw-curtain__sucked" aria-hidden="true">
-                {kisses
-                  .filter(k => !k.isDemo && !k.transient && !k.erasing)
-                  .map((k, i) => (
-                    <div
-                      key={k.id}
-                      className="kw-kiss kw-kiss--suck"
-                      style={{
-                        left: `${k.nx * 100}%`,
-                        top: `${k.ny * 100}%`,
-                        ['--kw-rot' as string]: `${k.rot}deg`,
-                        ['--kw-scale' as string]: `${k.scale}`,
-                        ['--kw-alpha' as string]: `${k.alpha}`,
-                        animationDelay: `${i * 70}ms`,
-                      }}
-                    >
-                      <Lip variant={k.variant} />
-                    </div>
-                  ))}
-              </div>
-              <div className="kw-curtain__heart" aria-hidden="true" />
-              <div className="kw-curtain__line">
-                {sealStage === 'engraving'
-                  ? t('curtain_engraving')
-                  : sealStage === 'finishing'
-                    ? t('curtain_finishing')
-                    : t('curtain_developing')}
-              </div>
-              <div className="kw-curtain__sub">
-                {t('curtain_subtitle', { n: realKissCount })}
-              </div>
-              <div className="kw-curtain__bar" aria-hidden="true">
-                <div className="kw-curtain__bar-fill" />
-              </div>
-            </div>
-          )}
         </div>
       )}
 

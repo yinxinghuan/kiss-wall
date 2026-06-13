@@ -40,19 +40,27 @@
   cursor: crosshair;
 }
 
-// Silhouette ghost layer — photoreal PNG, opacity controlled by per-render `style`
-.kw-silhouette-layer {
+// (Solo) AI portrait, sits behind the dark veil; the veil's kiss-holes
+// reveal pieces of it during play. On bloom, the veil fades and this layer
+// is the hero of the screen.
+.kw-portrait-layer {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+  object-fit: cover;
   pointer-events: none;
-  transition: opacity 220ms ease-out;
+  z-index: 0;
+  filter: saturate(0.85) brightness(0.92);
+  transition: filter 1.4s ease-out;
+}
+.kw-portrait-layer.is-bloomed {
+  filter: saturate(1) brightness(1);
 }
 
 // Kiss-back backdrop — the original author's portrait sitting dim under the
-// new player's kisses. Saturation pulled down + slight blur so it reads as
-// "memory" rather than "active image".
+// new player's mask. Same layer as kw-portrait-layer but reused for the
+// parent image when kiss-back is active.
 .kw-backdrop {
   position: absolute;
   inset: 0;
@@ -60,31 +68,49 @@
   height: 100%;
   object-fit: cover;
   pointer-events: none;
-  opacity: 0.45;
-  filter: saturate(0.55) brightness(0.7) blur(1.2px);
-  animation: kw-backdrop-bloom 1.4s ease-out;
-}
-@keyframes kw-backdrop-bloom {
-  0%   { opacity: 0; filter: saturate(0.4) brightness(0.4) blur(8px); }
-  100% { opacity: 0.45; filter: saturate(0.55) brightness(0.7) blur(1.2px); }
+  z-index: 0;
+  opacity: 0.65;
+  filter: saturate(0.7) brightness(0.78);
 }
 
-// AI-generated portrait revealed after seal — covers the dark canvas with
-// a slow bloom-up so the act of "developing" reads as a darkroom moment.
-.kw-reveal-portrait {
+// The dark veil — an SVG <rect> with a <mask> cutting circular holes per
+// kiss. Sits ABOVE the portrait/backdrop, BELOW the kiss stamps.
+.kw-veil {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
   pointer-events: none;
-  z-index: 2;
-  animation: kw-reveal-bloom 1.6s cubic-bezier(0.18, 0.7, 0.32, 1) forwards;
+  z-index: 1;
+  transition: opacity 1.4s cubic-bezier(0.18, 0.7, 0.32, 1);
+  opacity: 1;
 }
-@keyframes kw-reveal-bloom {
-  0%   { opacity: 0; filter: saturate(0.2) brightness(0.3) blur(14px); transform: scale(1.04); }
-  60%  { opacity: 0.85; filter: saturate(0.7) brightness(0.85) blur(2px); }
-  100% { opacity: 1; filter: saturate(1) brightness(1) blur(0); transform: scale(1); }
+.kw-veil.is-bloomed {
+  opacity: 0;
+}
+
+// Flourish copy floating up from each kiss site — short-lived italic.
+.kw-flourish {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: 'Cormorant Garamond', 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(13px, 3.6vw, 17px);
+  color: rgba(255, 235, 240, 0.92);
+  text-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.9),
+    0 0 14px rgba(245, 177, 199, 0.5);
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 5;
+  animation: kw-flourish-float 1.8s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+@keyframes kw-flourish-float {
+  0%   { opacity: 0;   transform: translate(-50%, calc(-50% + 4px)) scale(0.92); }
+  18%  { opacity: 1;   transform: translate(-50%, -50%) scale(1.05); }
+  60%  { opacity: 1;   transform: translate(-50%, calc(-50% - 18px)) scale(1); }
+  100% { opacity: 0;   transform: translate(-50%, calc(-50% - 42px)) scale(0.95); }
 }
 
 // ───────── Kiss decals ─────────────────────────────────────────────────
@@ -388,32 +414,13 @@
   animation: kw-fade-in 380ms ease-out;
 }
 
-// ───────── Sealing curtain — heartbeat pulse for the 5–8s gen wait ────
+// ───────── (legacy) Sealing curtain — kept only because some bundled CSS
+// resets reference @keyframes kw-fade-in below. Visually inert now. ────
 .kw-curtain {
-  position: absolute;
-  inset: 0;
-  background: rgba(7, 7, 10, 0.84);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 22px;
-  animation: kw-fade-in 220ms ease-out;
-  z-index: 20;
+  display: none;
 }
 .kw-curtain__heart {
-  width: 108px;
-  height: 108px;
-  background: radial-gradient(circle at 50% 50%,
-    rgba(245, 177, 199, 1) 0%,
-    rgba(217, 122, 153, 0.7) 32%,
-    rgba(217, 122, 153, 0) 72%);
-  border-radius: 999px;
-  animation: kw-heartbeat 1.05s cubic-bezier(0.4, 0, 0.3, 1) infinite;
-  filter: drop-shadow(0 0 26px rgba(245, 177, 199, 0.55));
-  z-index: 2;
+  display: none;
 }
 
 // Player's kisses lifted off the canvas and pulled toward the heartbeat.

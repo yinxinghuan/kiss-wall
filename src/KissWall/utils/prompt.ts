@@ -97,8 +97,12 @@ function rhythmFromTimes(times: number[]): string {
   return 'aching, slow, almost reluctant';
 }
 
-// Tight clustering → close-up; wide spread → wider framing.
-function framingFromSpread(spread: number): string {
+// Tight clustering → close-up; wide spread → wider framing. Single-kiss
+// case (spread === 0) is treated as "medium" — we don't have enough info
+// yet to pick a tight crop, and the focal-region heuristic from the
+// centroid already locks the composition.
+function framingFromSpread(spread: number, count: number): string {
+  if (count <= 2) return 'medium portrait, soft fall-off, intimate framing';
   if (spread < 0.14) return 'extreme close-up, shallow depth of field';
   if (spread < 0.24) return 'close portrait crop';
   if (spread < 0.34) return 'medium portrait, soft fall-off';
@@ -158,7 +162,7 @@ export function buildPortraitPrompt(input: PortraitPromptInput): PortraitPrompt 
   void cx; // cx reserved for future left/right framing — currently unused
   const mood = moodFromCount(real.length);
   const rhythm = rhythmFromTimes(real.map(k => k.t));
-  const framing = framingFromSpread(spread);
+  const framing = framingFromSpread(spread, real.length);
   const palette = paletteFromVariants(real.map(k => k.variant));
   const subject = SUBJECT_BY_SILHOUETTE[silhouette];
 
