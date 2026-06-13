@@ -42,6 +42,13 @@ export function DarkCanvas({
 }: DarkCanvasProps) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [now, setNow] = useState(performance.now());
+  // The portrait image starts heavily blurred + dimmed and is faded into
+  // clarity once the browser has actually decoded the bytes. This way the
+  // kiss-windows show a developing (not finished) image while the player is
+  // still kissing — same metaphor as photo paper in a chemistry bath.
+  const [portraitReady, setPortraitReady] = useState(false);
+  // Reset the ready flag whenever the URL changes (kiss-back → new url).
+  useEffect(() => { setPortraitReady(false); }, [portraitUrl]);
 
   useEffect(() => {
     if (bloomed) return;
@@ -106,11 +113,16 @@ export function DarkCanvas({
 
       {portraitUrl && (
         <img
-          className={`kw-portrait-layer${bloomed ? ' is-bloomed' : ''}`}
+          className={
+            'kw-portrait-layer'
+            + (portraitReady ? ' is-ready' : '')
+            + (bloomed ? ' is-bloomed' : '')
+          }
           src={portraitUrl}
           alt=""
           draggable={false}
           aria-hidden="true"
+          onLoad={() => setPortraitReady(true)}
         />
       )}
 

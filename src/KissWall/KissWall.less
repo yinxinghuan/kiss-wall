@@ -43,6 +43,12 @@
 // (Solo) AI portrait, sits behind the dark veil; the veil's kiss-holes
 // reveal pieces of it during play. On bloom, the veil fades and this layer
 // is the hero of the screen.
+//
+// Darkroom-develop transition: the moment the browser decodes the bytes,
+// the image enters at heavy blur + low brightness + low saturation, and
+// fades over 2.6s into full clarity. Players see this through the kiss
+// windows while they're still kissing, so the photograph keeps gaining
+// detail under their hands — same beat as paper in a chemistry bath.
 .kw-portrait-layer {
   position: absolute;
   inset: 0;
@@ -51,11 +57,19 @@
   object-fit: cover;
   pointer-events: none;
   z-index: 0;
-  filter: saturate(0.85) brightness(0.92);
-  transition: filter 1.4s ease-out;
+  opacity: 0;
+  filter: blur(12px) brightness(0.18) saturate(0.4) contrast(0.65);
+  transition:
+    opacity 2.6s cubic-bezier(0.22, 0.7, 0.3, 1),
+    filter  2.6s cubic-bezier(0.22, 0.7, 0.3, 1);
+}
+.kw-portrait-layer.is-ready {
+  opacity: 1;
+  filter: blur(0) brightness(1) saturate(1) contrast(1);
 }
 .kw-portrait-layer.is-bloomed {
-  filter: saturate(1) brightness(1);
+  // small extra pop once the veil iris finishes opening
+  filter: blur(0) brightness(1.04) saturate(1.06) contrast(1.02);
 }
 
 // Kiss-back backdrop — the original author's portrait sitting dim under the
