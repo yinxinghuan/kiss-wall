@@ -6,6 +6,7 @@ import { useKissWall, type KissBackContext } from './hooks/useKissWall';
 import { isSelf } from './hooks/useWall';
 import { installGlobalTapFeedback } from './utils/audio';
 import { WallIcon } from './assets/icons';
+import { Lip } from './assets/lips';
 import { t } from './i18n';
 import type { SealedStele, WallEntry } from './types';
 import './KissWall.less';
@@ -109,14 +110,18 @@ export default function KissWall() {
           {/* ─── HUD ───────────────────────────────────────────────────── */}
           <div className="kw-hud">
             <div className="kw-hud__title">
-              {isKissBack
-                ? `${t('kissing_back')} ${kissBack?.authorName ?? 'someone'}`
-                : 'KISS · WALL'}
+              {lastSealed?.portraitUrl
+                ? t('portrait_label')
+                : isKissBack
+                  ? `${t('kissing_back')} ${kissBack?.authorName ?? 'someone'}`
+                  : 'KISS · WALL'}
             </div>
             <div className="kw-hud__count">
-              {realKissCount === 0
-                ? (lifetime.totalKisses > 0 ? `${lifetime.totalKisses} ever` : '—')
-                : t('kisses_n', { n: realKissCount })}
+              {lastSealed?.portraitUrl
+                ? t('portrait_label_n', { n: lastSealed.kissCount })
+                : realKissCount === 0
+                  ? (lifetime.totalKisses > 0 ? `${lifetime.totalKisses} ever` : '—')
+                  : t('kisses_n', { n: realKissCount })}
             </div>
 
             <div className="kw-hud__actions">
@@ -155,16 +160,46 @@ export default function KissWall() {
           </div>
 
           {/* ─── Sealing curtain ──────────────────────────────────────── */}
+          {/* The player just tapped DEVELOP. For 5–8s we have to make them
+              feel a portrait is being CREATED FROM THEIR KISSES — not just
+              "loading…". So we lift their actual kiss marks off the canvas,
+              float them toward a heartbeat, and tell them what's happening. */}
           {sealing && (
             <div className="kw-curtain">
+              <div className="kw-curtain__sucked" aria-hidden="true">
+                {kisses
+                  .filter(k => !k.isDemo && !k.transient && !k.erasing)
+                  .map((k, i) => (
+                    <div
+                      key={k.id}
+                      className="kw-kiss kw-kiss--suck"
+                      style={{
+                        left: `${k.nx * 100}%`,
+                        top: `${k.ny * 100}%`,
+                        ['--kw-rot' as string]: `${k.rot}deg`,
+                        ['--kw-scale' as string]: `${k.scale}`,
+                        ['--kw-alpha' as string]: `${k.alpha}`,
+                        animationDelay: `${i * 70}ms`,
+                      }}
+                    >
+                      <Lip variant={k.variant} />
+                    </div>
+                  ))}
+              </div>
               <div className="kw-curtain__heart" aria-hidden="true" />
               <div className="kw-curtain__line">
-                {sealStage === 'developing' && t('curtain_developing')}
-                {sealStage === 'engraving' && t('curtain_engraving')}
-                {sealStage === 'finishing' && t('curtain_finishing')}
-                {sealStage === 'idle' && t('curtain_developing')}
+                {sealStage === 'engraving'
+                  ? t('curtain_engraving')
+                  : sealStage === 'finishing'
+                    ? t('curtain_finishing')
+                    : t('curtain_developing')}
               </div>
-              <div className="kw-curtain__dots"><span /><span /><span /></div>
+              <div className="kw-curtain__sub">
+                {t('curtain_subtitle', { n: realKissCount })}
+              </div>
+              <div className="kw-curtain__bar" aria-hidden="true">
+                <div className="kw-curtain__bar-fill" />
+              </div>
             </div>
           )}
         </div>
