@@ -16,10 +16,18 @@
 import type { Kiss, SilhouetteId } from '../types';
 import { kissStats } from './format';
 
+// v3 darkroom lock — every output must read as a single hand-toned darkroom
+// print. Strict palette guard so the gen model doesn't ship a bright colour
+// snapshot (which broke the visual cohesion with the rest of the toy).
 const STYLE_BASE =
-  'AlterU After Dark portrait, oil-painterly chiaroscuro, candlelit, '
-  + 'deep crimson and ink shadow, soft film grain, intimate single-subject framing, '
-  + 'no text, no watermark, no captions';
+  'AlterU After Dark, hand-toned darkroom portrait, vintage gelatin silver print '
+  + 'with a single warm rose-red tint, NEAR-MONOCHROME palette — only deep charcoal blacks, '
+  + 'bone whites, ash grays, and a single muted wine-red wash for the lips and deepest shadows. '
+  + 'NO bright primary colours, NO saturated greens, blues, yellows, or oranges. '
+  + 'Heavy chiaroscuro, candle-lit single light source, low key, '
+  + 'soft film grain, slight darkroom dodging, intimate single-subject framing, '
+  + 'feels like a sepia photograph someone bled into. '
+  + 'No text, no watermark, no captions';
 
 // Silhouette → subject anchor. Each becomes the "what is the portrait OF".
 const SUBJECT_BY_SILHOUETTE: Record<SilhouetteId, string> = {
@@ -111,18 +119,20 @@ function framingFromSpread(spread: number, count: number): string {
 
 // Most-used lip variant → accent palette. Variants are 0..5; we pick a hue
 // family per group.
+// Six wine-red / earth-toned single-light wash variants. All stay inside the
+// near-monochrome lock — they shift TEMPERATURE and DEPTH, never hue family.
 function paletteFromVariants(variants: number[]): string {
-  if (variants.length === 0) return 'crimson and bone';
+  if (variants.length === 0) return 'wine-red and bone, single light';
   const tally = new Array(6).fill(0);
   for (const v of variants) tally[v % 6] += 1;
   const top = tally.indexOf(Math.max(...tally));
   return [
-    'glossy carmine red and candle-bone',          // 0
-    'deep oxblood and tarnished gold',             // 1
-    'rose-petal pink and ash',                     // 2
-    'wine-stained burgundy and graphite',          // 3
-    'matte sangria and parchment',                 // 4
-    'velvet plum and smoke',                       // 5
+    'wine-red lips against bone, the rest charcoal and ash',          // 0
+    'oxblood mouth in a wash of warm gray, no other colour',           // 1
+    'rose-tinted darkroom print, near grayscale with a wine flush',    // 2
+    'burgundy shadow and bone highlights, no green or blue anywhere',  // 3
+    'sepia-rose duotone, charcoal contours, single light source',      // 4
+    'plum-black wash, single bright bone highlight on the lips',       // 5
   ][top];
 }
 

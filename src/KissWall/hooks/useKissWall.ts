@@ -192,7 +192,9 @@ write the epitaph.`;
       variant,
       rot: rand(-16, 16),
       scale: rand(0.78, 1.12),
-      alpha: rand(0.82, 1.0),
+      // v3: kiss prints sit lighter on the canvas — they're traces, not
+      // stamps. The darkroom-reveal layer behind them is the main image.
+      alpha: rand(0.42, 0.62),
       t: performance.now(),
       isDemo: false,
     };

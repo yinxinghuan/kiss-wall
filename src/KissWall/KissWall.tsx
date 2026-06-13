@@ -12,17 +12,18 @@ import './KissWall.less';
 
 type Screen = 'stele' | 'wall' | 'stele-detail';
 
-interface Flourish { id: string; nx: number; ny: number; line: string; }
-
-const FLOURISH_TTL_MS = 1800;
-const FLOURISH_MAX = 4;  // cap so the screen doesn't fill with text
+interface FlourishSlot { id: number; line: string; }
 
 export default function KissWall() {
   const [screen, setScreen] = useState<Screen>('stele');
   const [detailEntry, setDetailEntry] = useState<WallEntry | null>(null);
   const [parentKisses, setParentKisses] = useState<SealedStele['kisses']>([]);
-  const [flourishes, setFlourishes] = useState<Flourish[]>([]);
+  /** Single fixed-position flourish slot near the top of the screen. Every
+   *  new kiss replaces the line; we bump `id` so React re-mounts the node
+   *  and the fade-in animation re-runs. */
+  const [flourish, setFlourish] = useState<FlourishSlot | null>(null);
   const flourishIdxRef = useRef(0);
+  const flourishKeyRef = useRef(0);
 
   const {
     kisses, firstTouched,
@@ -40,9 +41,11 @@ export default function KissWall() {
     return teardown;
   }, []);
 
-  // Spawn a flourish for every newly-arrived kiss. We diff against the
-  // previous length so we only emit one per addition.
+  // Replace the single fixed-slot flourish on every new kiss. We pick a
+  // random line from the pool (skipping the previous one to avoid an
+  // immediate repeat) so the copy doesn't feel like a fixed loop.
   const lastKissCountRef = useRef(0);
+  const lastFlourishLineRef = useRef<string | null>(null);
   useEffect(() => {
     if (kisses.length <= lastKissCountRef.current) {
       lastKissCountRef.current = kisses.length;
@@ -51,24 +54,18 @@ export default function KissWall() {
     const last = kisses[kisses.length - 1];
     lastKissCountRef.current = kisses.length;
     if (!last || last.isDemo || last.transient || last.erasing) return;
-    if (bloomed) return;  // no flourish once the portrait is fully revealed
+    if (bloomed) return;
     const pool = t('flourishes').split('|');
-    const line = pool[flourishIdxRef.current % pool.length];
+    let line: string;
+    for (let i = 0; i < 4; i++) {
+      line = pool[Math.floor(Math.random() * pool.length)];
+      if (line !== lastFlourishLineRef.current) break;
+    }
+    line = line!;
+    lastFlourishLineRef.current = line;
+    flourishKeyRef.current += 1;
     flourishIdxRef.current += 1;
-    const id = `${last.id}-f`;
-    // Position the flourish slightly above the kiss so it floats up without
-    // covering the lipstick stamp.
-    const nx = Math.max(0.08, Math.min(0.92, last.nx));
-    const ny = Math.max(0.08, last.ny - 0.05);
-    setFlourishes(prev => {
-      const next = [...prev, { id, nx, ny, line }];
-      // cap
-      return next.length > FLOURISH_MAX ? next.slice(next.length - FLOURISH_MAX) : next;
-    });
-    const t1 = setTimeout(() => {
-      setFlourishes(prev => prev.filter(f => f.id !== id));
-    }, FLOURISH_TTL_MS);
-    return () => clearTimeout(t1);
+    setFlourish({ id: flourishKeyRef.current, line });
   }, [kisses, bloomed]);
 
   function openKissBack(entry: WallEntry) {
@@ -90,7 +87,8 @@ export default function KissWall() {
   function onAgain() {
     setKissBackParent(null);
     setParentKisses([]);
-    setFlourishes([]);
+    setFlourish(null);
+    lastFlourishLineRef.current = null;
     flourishIdxRef.current = 0;
     lastKissCountRef.current = 0;
     reset();
@@ -134,8 +132,16 @@ export default function KissWall() {
             epitaph={lastSealed?.epitaph ?? null}
             parentBackdropUrl={isKissBack ? kissBackParent?.parentPortraitUrl ?? null : null}
             ghostKisses={isKissBack ? parentKisses : undefined}
-            flourishes={flourishes}
           />
+
+          {/* Fixed-slot flourish — single line near the top, replaced on
+              each kiss. We key on flourish.id so React re-mounts and the
+              CSS fade-in animation re-fires. */}
+          {flourish && !bloomed && (
+            <div className="kw-flourish-slot" key={flourish.id} aria-hidden="true">
+              {flourish.line}
+            </div>
+          )}
 
           {/* Gen-image failed — visible state so the player isn't stuck. */}
           {failed && bloomed && (

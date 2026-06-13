@@ -73,8 +73,10 @@
   filter: saturate(0.7) brightness(0.78);
 }
 
-// The dark veil — an SVG <rect> with a <mask> cutting circular holes per
-// kiss. Sits ABOVE the portrait/backdrop, BELOW the kiss stamps.
+// The dark veil — an SVG <rect> with a <mask>. Each kiss punches a small
+// circle (animated by JS via the @keyframes-free RAF growth); on bloom an
+// IRIS circle at the centroid expands from r=0 → r=200 in 1.6s, sweeping
+// the darkness off the photograph from where the player was kissing.
 .kw-veil {
   position: absolute;
   inset: 0;
@@ -82,50 +84,65 @@
   height: 100%;
   pointer-events: none;
   z-index: 1;
-  transition: opacity 1.4s cubic-bezier(0.18, 0.7, 0.32, 1);
-  opacity: 1;
 }
-.kw-veil.is-bloomed {
-  opacity: 0;
+// CSS animations on the `r` SVG presentation attribute work in modern
+// browsers (Chrome / Safari / Firefox 2023+). This is the entire bloom
+// effect — no opacity fade, just a darkroom iris opening.
+.kw-veil__iris {
+  r: 0;
+}
+.kw-veil.is-blooming .kw-veil__iris {
+  animation: kw-iris-open 1.6s cubic-bezier(0.18, 0.7, 0.32, 1) forwards;
+}
+@keyframes kw-iris-open {
+  0%   { r: 0; }
+  100% { r: 180; }
 }
 
-// Flourish copy floating up from each kiss site — short-lived italic.
-.kw-flourish {
+// Fixed flourish slot — single italic line in the upper third of the
+// screen, replaced on every kiss. React re-mounts on key change so the
+// fade animation re-runs.
+.kw-flourish-slot {
   position: absolute;
-  transform: translate(-50%, -50%);
+  left: 8%;
+  right: 8%;
+  top: 22%;
+  text-align: center;
   font-family: 'Cormorant Garamond', 'Times New Roman', serif;
   font-style: italic;
   font-weight: 500;
-  font-size: clamp(13px, 3.6vw, 17px);
-  color: rgba(255, 235, 240, 0.92);
+  font-size: clamp(15px, 4.2vw, 19px);
+  line-height: 1.32;
+  color: rgba(255, 235, 240, 0.94);
+  letter-spacing: 0.012em;
   text-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.9),
-    0 0 14px rgba(245, 177, 199, 0.5);
+    0 2px 6px rgba(0, 0, 0, 0.9),
+    0 0 14px rgba(245, 177, 199, 0.34);
   pointer-events: none;
-  white-space: nowrap;
-  z-index: 5;
-  animation: kw-flourish-float 1.8s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+  z-index: 6;
+  animation: kw-flourish-breathe 2.4s cubic-bezier(0.22, 0.62, 0.3, 1) forwards;
 }
-@keyframes kw-flourish-float {
-  0%   { opacity: 0;   transform: translate(-50%, calc(-50% + 4px)) scale(0.92); }
-  18%  { opacity: 1;   transform: translate(-50%, -50%) scale(1.05); }
-  60%  { opacity: 1;   transform: translate(-50%, calc(-50% - 18px)) scale(1); }
-  100% { opacity: 0;   transform: translate(-50%, calc(-50% - 42px)) scale(0.95); }
+@keyframes kw-flourish-breathe {
+  0%   { opacity: 0; letter-spacing: 0.14em; filter: blur(3px); transform: translateY(6px); }
+  22%  { opacity: 1; letter-spacing: 0.012em; filter: blur(0); transform: translateY(0); }
+  78%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-6px); filter: blur(1px); }
 }
 
 // ───────── Kiss decals ─────────────────────────────────────────────────
 .kw-kiss {
   position: absolute;
-  width: clamp(72px, 22vw, 150px);
+  width: clamp(64px, 19vw, 132px);
   transform-origin: 50% 50%;
   transform:
     translate(-50%, -50%)
     rotate(var(--kw-rot, 0deg))
     scale(var(--kw-scale, 1));
-  opacity: var(--kw-alpha, 1);
+  opacity: var(--kw-alpha, 0.5);
   pointer-events: none;
   animation: kw-kiss-pop 280ms cubic-bezier(0.18, 0.9, 0.34, 1.05);
-  filter: drop-shadow(0 0 10px rgba(245, 177, 199, 0.18));
+  filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.4));
+  mix-blend-mode: multiply;
   z-index: 3;
 }
 .kw-lip-img {

@@ -1,16 +1,16 @@
-// v3 — "darkroom" canvas. Three stacked layers:
+// v3 — "darkroom" canvas with iris bloom.
 //
-//   1. The AI portrait (img, full opacity, sits behind everything else and
-//      is hidden by layer 2 until kissed away). Empty until gen-image
-//      resolves.
-//   2. A black overlay rendered as an SVG <rect> with circular HOLES cut by
-//      a <mask>, one per permanent kiss. Each hole's radius grows from the
-//      tap site outward over ~1.4s so the image leaks through gradually.
-//   3. The lipstick stamps (.kw-kiss) sit on top of the holes — they are
-//      both the gesture artifact and the marker of what's been "discovered."
-//
-// At bloom time, the dark overlay fades away entirely so the full portrait
-// is revealed under the kiss cluster + epitaph.
+//   Layer 0/0.5 : the AI portrait (and the kiss-back backdrop, if any)
+//   Layer 1     : a black SVG veil with TWO kinds of holes punched through it:
+//                   (a) one circle per kiss, growing 3% → 14% over 1.2s
+//                       (the "tap to reveal a little" gesture)
+//                   (b) ONE iris circle at the centroid of the kisses, r=0
+//                       until bloom, then animated 0 → 200 over 1.6s by CSS
+//                       (the final "developing" reveal)
+//   Layer 3a    : kiss-back parent's kisses as low-opacity echoes
+//   Layer 3b    : the player's own lipstick stamps (lighter alpha now)
+//   Layer 4     : NOTHING — flourish copy is rendered by the parent in a
+//                 fixed slot, not at the tap site.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Lip } from '../assets/lips';
@@ -19,27 +19,14 @@ import { t } from '../i18n';
 
 interface DarkCanvasProps {
   kisses: Kiss[];
-  /** Optional URL of the in-flight or completed portrait. Renders as the
-   *  hidden layer behind the dark mask once available. */
   portraitUrl?: string | null;
-  /** True once we've decided to fully unveil the portrait — the dark mask
-   *  fades out. */
   bloomed: boolean;
   firstTouched: boolean;
-  /** Hint label rendered before first touch. */
   hint: string;
   onTap: (nx: number, ny: number) => void;
-  /** Engraved at the base after bloom. */
   epitaph?: string | null;
-  /** Kiss-back mode — the original author's portrait sits dim under the
-   *  player's mask so their devotion is visible from kiss 1. */
   parentBackdropUrl?: string | null;
-  /** Kiss-back mode — the original author's kiss marks rendered as low-
-   *  opacity echoes under the player's new ones. */
   ghostKisses?: Kiss[];
-  /** Floating flourish copy spawned for each kiss. Each entry positions
-   *  itself near the original tap and animates up + out. */
-  flourishes?: Array<{ id: string; nx: number; ny: number; line: string }>;
 }
 
 export function DarkCanvas({
@@ -52,14 +39,10 @@ export function DarkCanvas({
   epitaph,
   parentBackdropUrl,
   ghostKisses,
-  flourishes,
 }: DarkCanvasProps) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [now, setNow] = useState(performance.now());
 
-  // While unbloomed, drive a 60fps re-render so kiss "holes" grow smoothly.
-  // Once bloomed there's nothing animating except CSS-driven layers, so we
-  // can stop.
   useEffect(() => {
     if (bloomed) return;
     let raf = 0;
@@ -81,14 +64,22 @@ export function DarkCanvas({
     onTap(nx, ny);
   }, [onTap]);
 
-  // Each kiss's hole grows from ~3% radius at placement → ~14% at 1.2s and
-  // then plateaus. The radius is computed in viewBox-percent units (100×100
-  // viewBox with preserveAspectRatio=none so the SVG stretches with the
-  // canvas).
   function holeRadius(k: Kiss): number {
     const ageMs = Math.max(0, now - k.t);
     const grow = Math.min(1, ageMs / 1200);
-    return 3 + grow * 11;  // %-of-viewBox; 100×100 viewBox so this is also %
+    return 3 + grow * 11;
+  }
+
+  // The iris-bloom circle sits at the centroid of the placed kisses so the
+  // final reveal radiates outward from where the player was kissing — feels
+  // like the photograph blooming up out of the bath where they touched.
+  const realKisses = kisses.filter(k => !k.isDemo && !k.transient && !k.erasing);
+  let cx = 50, cy = 50;
+  if (realKisses.length > 0) {
+    let sx = 0, sy = 0;
+    for (const k of realKisses) { sx += k.nx; sy += k.ny; }
+    cx = (sx / realKisses.length) * 100;
+    cy = (sy / realKisses.length) * 100;
   }
 
   return (
@@ -99,7 +90,6 @@ export function DarkCanvas({
       data-no-feedback="true"
       role="presentation"
     >
-      {/* ── Layer 1: kiss-back parent's portrait (dim memory) ─────────── */}
       {parentBackdropUrl && (
         <img
           className="kw-backdrop"
@@ -110,7 +100,6 @@ export function DarkCanvas({
         />
       )}
 
-      {/* ── Layer 1.5: the in-flight or completed AI portrait ────────── */}
       {portraitUrl && (
         <img
           className={`kw-portrait-layer${bloomed ? ' is-bloomed' : ''}`}
@@ -121,35 +110,39 @@ export function DarkCanvas({
         />
       )}
 
-      {/* ── Layer 2: dark veil with kiss-holes (svg <mask>) ──────────── */}
-      {/* The veil fades fully away once `bloomed`. */}
       <svg
-        className={`kw-veil${bloomed ? ' is-bloomed' : ''}`}
+        className={`kw-veil${bloomed ? ' is-blooming' : ''}`}
         viewBox="0 0 100 100"
         preserveAspectRatio="none"
         aria-hidden="true"
       >
         <defs>
           <mask id="kw-veil-mask">
-            {/* white = veil visible, black = window through to layer 1 */}
             <rect width="100" height="100" fill="white" />
-            {kisses
-              .filter(k => !k.isDemo && !k.transient && !k.erasing)
-              .map(k => (
-                <circle
-                  key={k.id}
-                  cx={k.nx * 100}
-                  cy={k.ny * 100}
-                  r={holeRadius(k)}
-                  fill="black"
-                />
-              ))}
+            {realKisses.map(k => (
+              <circle
+                key={k.id}
+                cx={k.nx * 100}
+                cy={k.ny * 100}
+                r={holeRadius(k)}
+                fill="black"
+              />
+            ))}
+            {/* iris bloom hole — CSS animates `r` from 0 → 200 when the
+                parent gains the .is-blooming class, sweeping the veil away
+                from the centroid of the player's kisses. */}
+            <circle
+              className="kw-veil__iris"
+              cx={cx}
+              cy={cy}
+              r={0}
+              fill="black"
+            />
           </mask>
         </defs>
         <rect width="100" height="100" fill="#06070a" mask="url(#kw-veil-mask)" />
       </svg>
 
-      {/* ── Layer 3a: kiss-back parent's ghost echo (kiss-back only) ─── */}
       {ghostKisses?.map(k => (
         <div
           key={`ghost-${k.id}`}
@@ -166,7 +159,6 @@ export function DarkCanvas({
         </div>
       ))}
 
-      {/* ── Layer 3b: the player's own lipstick stamps ──────────────── */}
       {kisses.map(k => (
         <div
           key={k.id}
@@ -188,23 +180,10 @@ export function DarkCanvas({
         </div>
       ))}
 
-      {/* ── Layer 4: floating flourish copy ─────────────────────────── */}
-      {flourishes?.map(f => (
-        <div
-          key={f.id}
-          className="kw-flourish"
-          style={{ left: `${f.nx * 100}%`, top: `${f.ny * 100}%` }}
-        >
-          {f.line}
-        </div>
-      ))}
-
-      {/* first-touch hint */}
       {!firstTouched && (
         <div className="kw-hint">{hint || t('hint_tap_v2')}</div>
       )}
 
-      {/* engraved epitaph (only after bloom) */}
       {bloomed && epitaph && (
         <div className="kw-epitaph">{epitaph}</div>
       )}
