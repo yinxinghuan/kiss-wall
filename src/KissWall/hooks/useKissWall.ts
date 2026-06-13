@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChat } from '@shared/runtime/useChat';
 import { useGameEvent } from '@shared/runtime/useGameEvent';
+import { useGenImage } from '@shared/runtime/useGenImage';
 import { useGameSave } from '@shared/save';
 import {
   pickSilhouette,
@@ -20,6 +21,7 @@ import { LIP_COUNT } from '../assets/lips';
 import type { Kiss, KissWallSave, SealedStele } from '../types';
 import { clamp, describeDistribution, rand, uuidLike } from '../utils/format';
 import { initAudioOnce, playKiss } from '../utils/audio';
+import { buildPortraitPrompt } from '../utils/prompt';
 
 const SEAL_MIN = 8;             // seal unlocks at ≥ 8 kisses (was 10)
 const REVEAL_TARGET = 15;       // approx kisses for full reveal (was 30)
@@ -35,6 +37,19 @@ const DEMO_POSITIONS: { nx: number; ny: number }[] = [
 ];
 const DEMO_STEP_MS = 1100;
 const DEMO_REST_MS = 800;
+
+/** Optional context when sealing on top of someone else's published portrait
+ *  (kiss-back). When set, the seal call produces a duet portrait via img2img
+ *  using the parent's portraitUrl as ref, attaches kissBackOf, and fires a
+ *  notify to the parent author. */
+export interface KissBackContext {
+  steleId: string;
+  authorId: string;
+  authorName?: string;
+  authorAvatarUrl?: string;
+  parentPortraitUrl?: string;
+  parentSilhouette?: SilhouetteId;
+}
 
 interface UseKissWallReturn {
   // session state
@@ -58,7 +73,10 @@ interface UseKissWallReturn {
   // sealing
   canSeal: boolean;
   sealing: boolean;
-  seal: () => Promise<SealedStele | null>;
+  /** Set to a beat-counter string while sealing so the curtain can show
+   *  "developing the portrait…" → "engraving the epitaph…" → "almost…". */
+  sealStage: 'idle' | 'developing' | 'engraving' | 'finishing';
+  seal: (parent?: KissBackContext) => Promise<SealedStele | null>;
   reset: () => void;
   // lifetime
   lifetime: { totalSealed: number; totalKisses: number };
@@ -75,6 +93,7 @@ export function useKissWall(): UseKissWallReturn {
   const [kisses, setKisses] = useState<Kiss[]>([]);
   const [firstTouched, setFirstTouched] = useState(false);
   const [sealing, setSealing] = useState(false);
+  const [sealStage, setSealStage] = useState<'idle' | 'developing' | 'engraving' | 'finishing'>('idle');
   const [lastSealed, setLastSealed] = useState<SealedStele | null>(null);
   const [demoFinger, setDemoFinger] = useState<{ nx: number; ny: number } | null>(null);
   const [erosion, setErosion] = useState(0);
@@ -86,6 +105,7 @@ export function useKissWall(): UseKissWallReturn {
     system:
       'You inscribe epitaphs onto kissed stelae for AlterU After Dark, a dark-romantic memorial toy. Each line is engraved in italics on real stone. Write exactly ONE line, lowercase, between 6 and 12 words, intimate but desolate. Reference the silhouette and the kiss density. No emojis, no quotes, no period at the end.',
   });
+  const genImage = useGenImage();
   const event = useGameEvent();
   const save = useGameSave<KissWallSave>('kiss-wall');
 
@@ -229,43 +249,97 @@ export function useKissWall(): UseKissWallReturn {
     return () => { cancelled = true; clearTimeout(initial); };
   }, [firstTouched, silhouetteMask.mask]);
 
-  // ── Seal: ask LLM for epitaph, save the stele, append history ───────────
-  const seal = useCallback(async (): Promise<SealedStele | null> => {
+  // ── Seal: gen portrait + epitaph in parallel, save the stele ────────────
+  //
+  // The portrait is the soul of the seal — it's built from the player's own
+  // kiss signal (focal region, density, rhythm, lip variant tally) so each
+  // result is unique to how they kissed. The epitaph is the second voice —
+  // a one-line italic line under the image.
+  //
+  // When `parent` is supplied this is a kiss-back: we img2img on top of the
+  // parent's portrait and fire a notify to the original author after persist.
+  const seal = useCallback(async (
+    parent?: KissBackContext,
+  ): Promise<SealedStele | null> => {
     if (sealing || realKisses.length < SEAL_MIN) return null;
     setSealing(true);
-    let epitaph = '';
-    try {
-      const userMsg = `silhouette: ${silhouette}
+    setSealStage('developing');
+
+    // Build the portrait prompt from the kiss signal. The silhouette CHOICE
+    // anchors the subject; the kiss DISTRIBUTION shapes mood/composition.
+    // For a kiss-back the parent's silhouette wins (we're layering over THEIR
+    // portrait), with our own pattern as the second voice.
+    const promptInput = buildPortraitPrompt({
+      silhouette: parent?.parentSilhouette ?? silhouette,
+      kisses: realKisses,
+      parentPortraitUrl: parent?.parentPortraitUrl,
+    });
+
+    // Kick off gen-image + chat in parallel — wall-clock is dominated by the
+    // image (5–8s usual, sometimes longer). Epitaph LLM is ~1s.
+    const userMsg = `silhouette: ${parent?.parentSilhouette ?? silhouette}
 kisses: ${realKisses.length}
 distribution: ${describeDistribution(realKisses)}
-
+${parent ? `(this is a second devotion layered over another player's portrait)\n` : ''}
 write the epitaph.`;
-      const reply = await chat.send(userMsg);
-      // sanitize: take first line, strip quotes/period
-      epitaph = (reply || '')
-        .split('\n')[0]
-        .trim()
-        .replace(/^["'`]+|["'`.]+$/g, '')
-        .toLowerCase();
-    } catch {
-      // fallback per i18n key
-      const fallbacks = [
-        'she came back forty-seven times',
-        'we kissed the bone first',
-        'he said the rose was for me',
-        'the hand was already cold',
-        'she wore the veil to her own funeral',
-        'someone is still standing here',
-      ];
-      epitaph = fallbacks[Math.floor(Math.random() * fallbacks.length)];
-    }
+
+    const epitaphPromise = (async () => {
+      try {
+        const reply = await chat.send(userMsg);
+        return (reply || '')
+          .split('\n')[0]
+          .trim()
+          .replace(/^["'`]+|["'`.]+$/g, '')
+          .toLowerCase();
+      } catch {
+        const fallbacks = [
+          'she came back forty-seven times',
+          'we kissed the bone first',
+          'he said the rose was for me',
+          'the hand was already cold',
+          'she wore the veil to her own funeral',
+          'someone is still standing here',
+        ];
+        return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+      }
+    })();
+
+    const portraitPromise = (async () => {
+      try {
+        return await genImage.generate({
+          prompt: promptInput.prompt,
+          ref_url: promptInput.ref_url,
+        });
+      } catch {
+        return undefined;  // detail view falls back to silhouette + kisses
+      }
+    })();
+
+    // Advance the curtain copy mid-way through the wait. Pure UI sugar.
+    const t1 = setTimeout(() => setSealStage('engraving'), 1800);
+    const t2 = setTimeout(() => setSealStage('finishing'), 4500);
+
+    const [epitaph, portraitUrl] = await Promise.all([epitaphPromise, portraitPromise]);
+    clearTimeout(t1);
+    clearTimeout(t2);
+
     const sealed: SealedStele = {
       id: uuidLike(),
-      silhouette,
+      silhouette: parent?.parentSilhouette ?? silhouette,
       kisses: realKisses.slice(),
       epitaph,
       sealedAt: Date.now(),
       kissCount: realKisses.length,
+      portraitUrl,
+      kissBackOf: parent
+        ? {
+            steleId: parent.steleId,
+            authorId: parent.authorId,
+            authorName: parent.authorName,
+            authorAvatarUrl: parent.authorAvatarUrl,
+            parentPortraitUrl: parent.parentPortraitUrl,
+          }
+        : undefined,
     };
     setLastSealed(sealed);
     // persist save (cap history at 10 newest first). Read from mirror —
@@ -278,11 +352,34 @@ write the epitaph.`;
     };
     setMirror(next);
     save.persist(next);
-    // platform event so the wall counts go up + others' walls refresh
-    event.trigger('kiss_sealed', { silhouette, kisses: realKisses.length });
+
+    // Platform event — kiss-back fires a notify to the original author with
+    // the duet portrait attached. Solo seals are tracked too (no target).
+    if (parent && portraitUrl) {
+      event.trigger('kiss_back', {
+        actions: [
+          {
+            type: 'notify',
+            target_user_id: parent.authorId,
+            image: {
+              ref_url: portraitUrl,
+              prompt: 'Duet portrait — a second devotion layered over the original.',
+            },
+            message: {
+              template: '{sender_name} kissed your portrait. Something new bloomed.',
+              variables: ['sender_name'],
+            },
+          },
+        ],
+      });
+    } else {
+      event.trigger('kiss_sealed', { silhouette, kisses: realKisses.length });
+    }
+
     setSealing(false);
+    setSealStage('idle');
     return sealed;
-  }, [sealing, realKisses, silhouette, chat, save, event]);
+  }, [sealing, realKisses, silhouette, chat, genImage, save, event, mirror]);
 
   // ── Reset the stele to start kissing a new one (after seal) ─────────────
   const reset = useCallback(() => {
@@ -308,11 +405,12 @@ write the epitaph.`;
     addKiss,
     canSeal,
     sealing,
+    sealStage,
     seal,
     reset,
     lifetime,
     lastSealed,
-    history: save.savedData?.history ?? [],
+    history: mirror?.history ?? save.savedData?.history ?? [],
   };
 }
 

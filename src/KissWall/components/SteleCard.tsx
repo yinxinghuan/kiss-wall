@@ -1,9 +1,11 @@
-// Wall card — v2 dark-canvas aesthetic. No stele frame; just the kiss
-// cluster against the same radial-dark background, with the epitaph below.
+// Wall card — v3. Primary visual is the AI-generated portrait when present;
+// otherwise we fall back to the old silhouette-ghost + kiss overlay for
+// pre-AI saves. A small "duet" badge tags kiss-back portraits.
 
 import { Lip } from '../assets/lips';
 import { SilhouetteShape } from '../assets/silhouettes';
 import type { SealedStele } from '../types';
+import { t } from '../i18n';
 
 interface SteleCardProps {
   stele: SealedStele;
@@ -23,13 +25,23 @@ export function SteleCard({
   return (
     <div className="kw-card" onClick={onClick} role="button" tabIndex={0}>
       <div className="kw-card__canvas">
-        <div
-          className="kw-silhouette-layer"
-          style={{ opacity: 0.5 }}
-          aria-hidden="true"
-        >
-          <SilhouetteShape id={stele.silhouette} />
-        </div>
+        {stele.portraitUrl ? (
+          <img
+            className="kw-card__portrait"
+            src={stele.portraitUrl}
+            alt=""
+            loading="lazy"
+            draggable={false}
+          />
+        ) : (
+          <div
+            className="kw-silhouette-layer"
+            style={{ opacity: 0.5 }}
+            aria-hidden="true"
+          >
+            <SilhouetteShape id={stele.silhouette} />
+          </div>
+        )}
         <div className="kw-card__kisses">
           {stele.kisses.map(k => (
             <div
@@ -47,6 +59,9 @@ export function SteleCard({
             </div>
           ))}
         </div>
+        {stele.kissBackOf && (
+          <div className="kw-card__badge">{t('duet')}</div>
+        )}
       </div>
       <div className="kw-epitaph kw-epitaph--mini">{stele.epitaph}</div>
       <div

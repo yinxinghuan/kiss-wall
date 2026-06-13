@@ -28,6 +28,19 @@ export interface SealedStele {
   epitaph: string;
   sealedAt: number;
   kissCount: number;
+  /** URL of the AI portrait generated from this seal's kiss signal. Optional
+   *  for older saves (those fall back to the silhouette + kiss overlay). */
+  portraitUrl?: string;
+  /** Set on duet portraits produced by kiss-back. Points at the parent
+   *  stele/author so the detail view can surface the lineage and the seal
+   *  flow can fire a notify to the original author. */
+  kissBackOf?: {
+    steleId: string;
+    authorId: string;
+    authorName?: string;
+    authorAvatarUrl?: string;
+    parentPortraitUrl?: string;
+  };
 }
 
 export interface KissWallSave {

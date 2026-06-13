@@ -1,27 +1,31 @@
 import { useEffect, useState } from 'react';
 import { DarkCanvas } from './components/DarkCanvas';
-import { FramingCard } from './components/FramingCard';
 import { WallView } from './components/WallView';
 import { SteleDetail } from './components/SteleDetail';
-import { useKissWall } from './hooks/useKissWall';
+import { useKissWall, type KissBackContext } from './hooks/useKissWall';
 import { isSelf } from './hooks/useWall';
 import { installGlobalTapFeedback } from './utils/audio';
 import { WallIcon } from './assets/icons';
 import { t } from './i18n';
-import type { WallEntry } from './types';
+import type { SealedStele, WallEntry } from './types';
 import './KissWall.less';
 
-type Screen = 'stele' | 'wall' | 'stele-detail';
+type Screen = 'stele' | 'wall' | 'stele-detail' | 'kiss-back';
 
 export default function KissWall() {
   const [screen, setScreen] = useState<Screen>('stele');
-  const [framingOpen, setFramingOpen] = useState(true);
   const [detailEntry, setDetailEntry] = useState<WallEntry | null>(null);
+  /** Set when we open the kiss-back canvas. Drives the seal flow + the
+   *  backdrop image + the ghost kisses echoed under the player's. */
+  const [kissBack, setKissBack] = useState<KissBackContext | null>(null);
+  /** Cached parent kiss positions used as ghost echo in the kiss-back canvas. */
+  const [parentKisses, setParentKisses] = useState<SealedStele['kisses']>([]);
+
   const {
     kisses, silhouette, firstTouched,
     demoFingerNx, demoFingerNy,
     addKiss,
-    canSeal, sealing, seal, reset,
+    canSeal, sealing, sealStage, seal, reset,
     lifetime, lastSealed, realKissCount,
     silhouetteAlpha,
     history,
@@ -33,24 +37,77 @@ export default function KissWall() {
     return teardown;
   }, []);
 
+  function openKissBack(entry: WallEntry) {
+    if (isSelf(entry)) return;
+    setKissBack({
+      steleId: entry.stele.id,
+      authorId: entry.userId,
+      authorName: entry.userName,
+      authorAvatarUrl: entry.userAvatarUrl,
+      parentPortraitUrl: entry.stele.portraitUrl,
+      parentSilhouette: entry.stele.silhouette,
+    });
+    setParentKisses(entry.stele.kisses);
+    reset();
+    setScreen('kiss-back');
+  }
+
+  async function doSeal() {
+    const sealed = await seal(kissBack ?? undefined);
+    if (!sealed) return;
+    // After a seal we land on the same screen — the just-sealed portrait
+    // gets revealed beneath the kiss cluster. The user can choose Again
+    // (new stele) or Wall (see it land + others'). For kiss-back, we also
+    // clear the parent context after the seal completes so re-tapping
+    // "Again" starts a fresh solo session.
+  }
+
+  function onAgain() {
+    setKissBack(null);
+    setParentKisses([]);
+    reset();
+    setScreen('stele');
+  }
+
+  // ── Solo stele OR kiss-back canvas — same surface, different props ──────
+  const isKissBack = screen === 'kiss-back';
+  const canvasSilhouette = kissBack?.parentSilhouette ?? silhouette;
+  const canvasBackdrop = isKissBack ? kissBack?.parentPortraitUrl ?? null : null;
+
   return (
     <div className="kw-app">
-      {screen === 'stele' && (
-        <div className="kw-screen kw-screen--stele">
+      {(screen === 'stele' || screen === 'kiss-back') && (
+        <div className={`kw-screen kw-screen--stele${isKissBack ? ' kw-screen--kissback' : ''}`}>
           <DarkCanvas
             kisses={kisses}
-            silhouette={silhouette}
-            silhouetteAlpha={silhouetteAlpha}
+            silhouette={canvasSilhouette}
+            silhouetteAlpha={lastSealed?.portraitUrl ? 0 : silhouetteAlpha}
             firstTouched={firstTouched}
             demoFingerNx={demoFingerNx}
             demoFingerNy={demoFingerNy}
             onTap={addKiss}
             epitaph={lastSealed?.epitaph ?? null}
+            backdropUrl={canvasBackdrop}
+            ghostKisses={isKissBack ? parentKisses : undefined}
           />
+
+          {/* Revealed AI portrait — replaces the dark canvas after seal */}
+          {lastSealed?.portraitUrl && (
+            <img
+              className="kw-reveal-portrait"
+              src={lastSealed.portraitUrl}
+              alt=""
+              draggable={false}
+            />
+          )}
 
           {/* ─── HUD ───────────────────────────────────────────────────── */}
           <div className="kw-hud">
-            <div className="kw-hud__title">KISS · WALL</div>
+            <div className="kw-hud__title">
+              {isKissBack
+                ? `${t('kissing_back')} ${kissBack?.authorName ?? 'someone'}`
+                : 'KISS · WALL'}
+            </div>
             <div className="kw-hud__count">
               {realKissCount === 0
                 ? (lifetime.totalKisses > 0 ? `${lifetime.totalKisses} ever` : '—')
@@ -61,15 +118,15 @@ export default function KissWall() {
               {!lastSealed && canSeal && (
                 <button
                   className="kw-btn kw-btn--seal"
-                  onClick={() => { void seal(); }}
+                  onClick={() => { void doSeal(); }}
                   disabled={sealing}
                 >
-                  {t('seal_cta')}
+                  {isKissBack ? t('seal_kissback') : t('seal_cta')}
                 </button>
               )}
               {lastSealed && (
                 <>
-                  <button className="kw-btn kw-btn--ghost" onClick={reset}>
+                  <button className="kw-btn kw-btn--ghost" onClick={onAgain}>
                     {t('again')}
                   </button>
                   <button
@@ -95,7 +152,13 @@ export default function KissWall() {
           {/* ─── Sealing curtain ──────────────────────────────────────── */}
           {sealing && (
             <div className="kw-curtain">
-              <div className="kw-curtain__line">{t('sealing')}</div>
+              <div className="kw-curtain__heart" aria-hidden="true" />
+              <div className="kw-curtain__line">
+                {sealStage === 'developing' && t('curtain_developing')}
+                {sealStage === 'engraving' && t('curtain_engraving')}
+                {sealStage === 'finishing' && t('curtain_finishing')}
+                {sealStage === 'idle' && t('curtain_developing')}
+              </div>
               <div className="kw-curtain__dots"><span /><span /><span /></div>
             </div>
           )}
@@ -121,11 +184,12 @@ export default function KissWall() {
             setScreen('wall');
             setDetailEntry(null);
           }}
+          onKissBack={() => {
+            const e = detailEntry;
+            setDetailEntry(null);
+            openKissBack(e);
+          }}
         />
-      )}
-
-      {framingOpen && screen === 'stele' && (
-        <FramingCard onDismiss={() => setFramingOpen(false)} />
       )}
 
       <img

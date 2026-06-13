@@ -1,12 +1,15 @@
 // Full-screen detail view of a sealed stele. Tap a wall card to open this.
-// Shows the silhouette ghost (full reveal), the kiss cluster, the italic
-// epitaph engraved at the base, author chip (tap → Aigram profile), and
-// three reaction buttons (mourn / sit with / bless).
+//
+// v3 — primary visual is the AI-generated portrait (if present); kisses still
+// overlay on top as the player's gestural signature. Below the portrait, an
+// italic epitaph. The detail page now has ONE primary social action — KISS
+// BACK — which opens the kiss-back canvas on top of this portrait. The ♥
+// reaction is kept as a low-friction notify ("breathed beside it").
 
 import { useState } from 'react';
 import { Lip } from '../assets/lips';
 import { SilhouetteShape } from '../assets/silhouettes';
-import { BackIcon, BrokenHeartIcon, CandleIcon, RoseIcon } from '../assets/icons';
+import { BackIcon, BrokenHeartIcon } from '../assets/icons';
 import { openAigramProfile } from '@shared/runtime/bridge';
 import { useGameEvent } from '@shared/runtime/useGameEvent';
 import type { WallEntry } from '../types';
@@ -16,40 +19,35 @@ interface SteleDetailProps {
   entry: WallEntry;
   isMine: boolean;
   onBack: () => void;
+  /** Open the kiss-back canvas on top of this stele. Hidden when isMine
+   *  (you can't kiss your own portrait back). */
+  onKissBack?: () => void;
 }
 
-export function SteleDetail({ entry, isMine, onBack }: SteleDetailProps) {
-  const [reactions, setReactions] = useState({
-    heart: false,
-    candle: false,
-    rose: false,
-  });
+export function SteleDetail({ entry, isMine, onBack, onKissBack }: SteleDetailProps) {
+  const [hearted, setHearted] = useState(false);
   const event = useGameEvent();
+  const portrait = entry.stele.portraitUrl;
+  const parent = entry.stele.kissBackOf;
 
-  function toggle(kind: 'heart' | 'candle' | 'rose') {
-    if (reactions[kind]) return;  // increment-only per platform contract
-    setReactions(r => ({ ...r, [kind]: true }));
-    // Attach a spec-compliant notify when honoring someone else's stele.
-    // Steles are rendered in DOM (silhouette SVG + lip stamps), so we
-    // have no raster asset to attach as ref_url — omit image (it's
-    // optional per spec). The notification falls back to game icon +
-    // platform avatar + text.
-    const tmpl =
-      kind === 'heart'  ? '{sender_name} mourned at your stele.' :
-      kind === 'candle' ? '{sender_name} sat with your stele.' :
-                          '{sender_name} laid a rose on your stele.';
+  function heart() {
+    if (hearted) return;
+    setHearted(true);
     const config = !isMine && entry.userId
       ? {
           actions: [
             {
               type: 'notify',
               target_user_id: entry.userId,
-              message: { template: tmpl, variables: ['sender_name'] },
+              message: {
+                template: '{sender_name} breathed beside your portrait.',
+                variables: ['sender_name'],
+              },
             },
           ],
         }
       : undefined;
-    event.trigger(`reaction_${kind}`, config);
+    event.trigger('reaction_heart', config);
   }
 
   return (
@@ -77,9 +75,18 @@ export function SteleDetail({ entry, isMine, onBack }: SteleDetailProps) {
       </div>
 
       <div className="kw-detail__stage">
-        <div className="kw-silhouette-layer" style={{ opacity: 0.55 }} aria-hidden="true">
-          <SilhouetteShape id={entry.stele.silhouette} />
-        </div>
+        {portrait ? (
+          <img
+            className="kw-detail__portrait"
+            src={portrait}
+            alt=""
+            draggable={false}
+          />
+        ) : (
+          <div className="kw-silhouette-layer" style={{ opacity: 0.55 }} aria-hidden="true">
+            <SilhouetteShape id={entry.stele.silhouette} />
+          </div>
+        )}
         <div className="kw-detail__kisses">
           {entry.stele.kisses.map(k => (
             <div
@@ -100,35 +107,33 @@ export function SteleDetail({ entry, isMine, onBack }: SteleDetailProps) {
         <div className="kw-detail__epitaph">{entry.stele.epitaph}</div>
       </div>
 
+      {parent && (
+        <div className="kw-detail__lineage">
+          {t('layered_over')} {parent.authorName ?? 'someone'}
+        </div>
+      )}
+
       <div className="kw-detail__count">
         {entry.stele.kissCount} kisses
       </div>
 
-      <div className="kw-detail__reactions">
+      <div className="kw-detail__actions">
         <button
-          className={`kw-reaction${reactions.heart ? ' is-active' : ''}`}
-          onClick={() => toggle('heart')}
+          className={`kw-reaction${hearted ? ' is-active' : ''}`}
+          onClick={heart}
           aria-label={t('react_heart')}
         >
-          <BrokenHeartIcon size={22} />
+          <BrokenHeartIcon size={20} />
           <span>{t('react_heart')}</span>
         </button>
-        <button
-          className={`kw-reaction${reactions.candle ? ' is-active' : ''}`}
-          onClick={() => toggle('candle')}
-          aria-label={t('react_candle')}
-        >
-          <CandleIcon size={22} />
-          <span>{t('react_candle')}</span>
-        </button>
-        <button
-          className={`kw-reaction${reactions.rose ? ' is-active' : ''}`}
-          onClick={() => toggle('rose')}
-          aria-label={t('react_rose')}
-        >
-          <RoseIcon size={22} />
-          <span>{t('react_rose')}</span>
-        </button>
+        {!isMine && onKissBack && (
+          <button
+            className="kw-btn kw-btn--seal kw-btn--kissback"
+            onClick={onKissBack}
+          >
+            {t('kiss_back')}
+          </button>
+        )}
       </div>
     </div>
   );
