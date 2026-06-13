@@ -66,8 +66,12 @@ export function DarkCanvas({
 
   function holeRadius(k: Kiss): number {
     const ageMs = Math.max(0, now - k.t);
-    const grow = Math.min(1, ageMs / 1200);
-    return 3 + grow * 11;
+    // ease-out so the edge softens visibly: fast early growth, slow tail.
+    const tNorm = Math.min(1, ageMs / 1400);
+    const grow = 1 - Math.pow(1 - tNorm, 2.2);
+    // Base radius slightly bumped to compensate for the soft-edge filter
+    // pulling the visible boundary inward by ~2 viewBox units.
+    return 5 + grow * 12;
   }
 
   // The iris-bloom circle sits at the centroid of the placed kisses so the
@@ -117,27 +121,71 @@ export function DarkCanvas({
         aria-hidden="true"
       >
         <defs>
+          {/* Soft-edge + organic-displacement filter for the kiss windows.
+              feGaussianBlur fans the circles' hard edges into a vignette;
+              feTurbulence + feDisplacementMap warps the boundary so it
+              reads like darkroom chemistry creeping out from the tap,
+              not a geometric circle. */}
+          <filter
+            id="kw-soft-edge"
+            x="-30%"
+            y="-30%"
+            width="160%"
+            height="160%"
+          >
+            <feTurbulence
+              type="fractalNoise"
+              baseFrequency="0.9"
+              numOctaves="2"
+              seed="7"
+              result="noise"
+            />
+            <feGaussianBlur in="SourceGraphic" stdDeviation="2.2" result="blurred" />
+            <feDisplacementMap
+              in="blurred"
+              in2="noise"
+              scale="3.4"
+              xChannelSelector="R"
+              yChannelSelector="G"
+            />
+          </filter>
+          {/* Slightly different filter for the iris-bloom — softer edge,
+              less displacement, so the final reveal reads as a calm
+              opening rather than a chaotic one. */}
+          <filter
+            id="kw-iris-edge"
+            x="-30%"
+            y="-30%"
+            width="160%"
+            height="160%"
+          >
+            <feGaussianBlur stdDeviation="3" />
+          </filter>
           <mask id="kw-veil-mask">
             <rect width="100" height="100" fill="white" />
-            {realKisses.map(k => (
-              <circle
-                key={k.id}
-                cx={k.nx * 100}
-                cy={k.ny * 100}
-                r={holeRadius(k)}
-                fill="black"
-              />
-            ))}
+            <g filter="url(#kw-soft-edge)">
+              {realKisses.map(k => (
+                <circle
+                  key={k.id}
+                  cx={k.nx * 100}
+                  cy={k.ny * 100}
+                  r={holeRadius(k)}
+                  fill="black"
+                />
+              ))}
+            </g>
             {/* iris bloom hole — CSS animates `r` from 0 → 200 when the
                 parent gains the .is-blooming class, sweeping the veil away
                 from the centroid of the player's kisses. */}
-            <circle
-              className="kw-veil__iris"
-              cx={cx}
-              cy={cy}
-              r={0}
-              fill="black"
-            />
+            <g filter="url(#kw-iris-edge)">
+              <circle
+                className="kw-veil__iris"
+                cx={cx}
+                cy={cy}
+                r={0}
+                fill="black"
+              />
+            </g>
           </mask>
         </defs>
         <rect width="100" height="100" fill="#06070a" mask="url(#kw-veil-mask)" />
