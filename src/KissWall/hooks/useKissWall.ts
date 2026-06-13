@@ -304,14 +304,25 @@ write the epitaph.`;
       }
     })();
 
+    // gen-image is the soul of the seal — try twice (slow upstream sometimes
+    // 500s on the first hit) before giving up. We log to the console so the
+    // player can open devtools / Aigram log viewer and see WHY the fallback
+    // path triggered, rather than silently shipping a silhouette stele.
     const portraitPromise = (async () => {
+      const args = {
+        prompt: promptInput.prompt,
+        ref_url: promptInput.ref_url,
+      };
       try {
-        return await genImage.generate({
-          prompt: promptInput.prompt,
-          ref_url: promptInput.ref_url,
-        });
-      } catch {
-        return undefined;  // detail view falls back to silhouette + kisses
+        return await genImage.generate(args);
+      } catch (e1) {
+        console.warn('[kiss-wall] gen-image attempt 1 failed, retrying:', e1);
+        try {
+          return await genImage.generate(args);
+        } catch (e2) {
+          console.error('[kiss-wall] gen-image failed twice:', e2);
+          return undefined;
+        }
       }
     })();
 

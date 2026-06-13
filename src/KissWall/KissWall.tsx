@@ -100,6 +100,11 @@ export default function KissWall() {
               draggable={false}
             />
           )}
+          {/* Gen-image failed — explicit visible state so the player doesn't
+              wonder why they're looking at the old silhouette. */}
+          {lastSealed && !lastSealed.portraitUrl && (
+            <div className="kw-fail">{t('portrait_failed')}</div>
+          )}
 
           {/* ─── HUD ───────────────────────────────────────────────────── */}
           <div className="kw-hud">
