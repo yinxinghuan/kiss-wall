@@ -273,7 +273,9 @@ write the epitaph.`;
         setTimeout(tick, DEMO_STEP_MS);
       }
     };
-    const initial = setTimeout(tick, 600);
+    // Drop the finger in fast so a player opening the screen sees the
+    // affordance before they make up their mind to keep scrolling.
+    const initial = setTimeout(tick, 200);
     return () => { cancelled = true; clearTimeout(initial); };
   }, [firstTouched]);
 

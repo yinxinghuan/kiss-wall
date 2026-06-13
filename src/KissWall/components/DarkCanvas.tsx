@@ -246,14 +246,18 @@ export function DarkCanvas({
         </div>
       ))}
 
-      {/* ghost-finger demo before first touch */}
+      {/* ghost-finger demo before first touch — wrapped in a ripple ring
+          so the affordance reads at a glance instead of just an icon */}
       {!firstTouched && demoFingerNx != null && demoFingerNy != null && (
         <div
           className="kw-finger"
           style={{ left: `${demoFingerNx * 100}%`, top: `${demoFingerNy * 100}%` }}
           aria-hidden="true"
         >
-          <FingerIcon size={44} />
+          <div className="kw-finger__ripple" />
+          <div className="kw-finger__icon">
+            <FingerIcon size={48} />
+          </div>
         </div>
       )}
 
