@@ -26,6 +26,19 @@ import { buildPortraitPrompt } from '../utils/prompt';
 const BLOOM_TARGET = 12;    // minimum permanent kisses before the dark blooms
 const BLOOM_DELAY_MS = 700;  // grace after threshold + image ready so the last kiss lands
 
+// Pre-touch demo loop — ghost finger that wanders the canvas placing
+// isDemo kisses so first-time players see, before they tap, that (a) the
+// black IS the play surface and (b) tapping leaves a mark. No prompt is
+// locked, no holes are cut, no chat fires — purely visual rehearsal.
+const DEMO_POSITIONS: { nx: number; ny: number }[] = [
+  { nx: 0.34, ny: 0.36 },
+  { nx: 0.64, ny: 0.46 },
+  { nx: 0.48, ny: 0.64 },
+  { nx: 0.40, ny: 0.30 },
+];
+const DEMO_STEP_MS = 1100;
+const DEMO_REST_MS = 800;
+
 /** Optional context when sealing on top of someone else's published portrait
  *  (kiss-back). The first kiss still locks the prompt; we pass the parent's
  *  portraitUrl as img2img ref + fire a notify when the bloom completes. */
@@ -57,6 +70,10 @@ interface UseKissWallReturn {
    *  again" card and lets the player restart the session. */
   failed: boolean;
   firstTouched: boolean;
+  /** Ghost-finger demo position before first real touch — null when not
+   *  showing. Set by the demo loop; cleared on first real tap. */
+  demoFingerNx: number | null;
+  demoFingerNy: number | null;
   /** True once the player has clicked enough times — used to swap the HUD
    *  count from "13 kisses" to a "DEVELOPING…" label during the brief wait
    *  for the image to land. */
@@ -79,6 +96,7 @@ export function useKissWall(): UseKissWallReturn {
   const [silhouette, setSilhouette] = useState<SilhouetteId>(() => pickSilhouette());
   const [kisses, setKisses] = useState<Kiss[]>([]);
   const [firstTouched, setFirstTouched] = useState(false);
+  const [demoFinger, setDemoFinger] = useState<{ nx: number; ny: number } | null>(null);
   const [portraitUrl, setPortraitUrl] = useState<string | null | undefined>(undefined);
   const [epitaph, setEpitaph] = useState<string | null>(null);
   const [bloomed, setBloomed] = useState(false);
@@ -201,10 +219,63 @@ write the epitaph.`;
     if (!firstTouchedRef.current) {
       firstTouchedRef.current = true;
       setFirstTouched(true);
+      setDemoFinger(null);
+      // wipe any demo kisses still on the canvas so the player's first real
+      // kiss is the only thing visible going forward
+      setKisses(prev => [...prev.filter(x => !x.isDemo), k]);
       kickOffGeneration(k);
+      return;
     }
     setKisses(prev => [...prev, k]);
   }, [kickOffGeneration]);
+
+  // ── Intro demo loop — ghost finger demonstrates the play surface ──────
+  // Runs until the player's first real tap; isDemo kisses are placed at the
+  // ghost finger's positions, then wiped between cycles. None of them lock
+  // the prompt or cut mask holes (see addKiss above + the DarkCanvas mask
+  // filter on !k.isDemo).
+  useEffect(() => {
+    if (firstTouched) return;
+    let cancelled = false;
+    let step = 0;
+
+    const tick = () => {
+      if (cancelled || firstTouchedRef.current) return;
+      const pos = DEMO_POSITIONS[step % DEMO_POSITIONS.length];
+      setDemoFinger(pos);
+      // show finger for ~450ms, then place the demo kiss
+      setTimeout(() => {
+        if (cancelled || firstTouchedRef.current) return;
+        const variant = Math.floor(Math.random() * LIP_COUNT);
+        const k: Kiss = {
+          id: uuidLike(),
+          nx: pos.nx,
+          ny: pos.ny,
+          variant,
+          rot: rand(-14, 14),
+          scale: rand(0.85, 1.05),
+          alpha: 0.85,
+          t: performance.now(),
+          isDemo: true,
+        };
+        setKisses(prev => [...prev, k]);
+      }, 450);
+      step += 1;
+      if (step % DEMO_POSITIONS.length === 0) {
+        // wipe demo kisses then loop
+        setTimeout(() => {
+          if (cancelled || firstTouchedRef.current) return;
+          setKisses(prev => prev.filter(x => !x.isDemo));
+          setDemoFinger(null);
+          setTimeout(tick, DEMO_REST_MS);
+        }, DEMO_STEP_MS - 100);
+      } else {
+        setTimeout(tick, DEMO_STEP_MS);
+      }
+    };
+    const initial = setTimeout(tick, 600);
+    return () => { cancelled = true; clearTimeout(initial); };
+  }, [firstTouched]);
 
   // ── Auto-bloom: when enough kisses landed AND the image is ready ────────
   useEffect(() => {
@@ -295,6 +366,7 @@ write the epitaph.`;
     setEpitaph(null);
     setBloomed(false);
     setKissBackParent(null);
+    setDemoFinger(null);
     firstTouchedRef.current = false;
     setFirstTouched(false);
     generationStartedRef.current = false;
@@ -321,6 +393,8 @@ write the epitaph.`;
     lifetime,
     lastSealed,
     history: mirror?.history ?? save.savedData?.history ?? [],
+    demoFingerNx: demoFinger?.nx ?? null,
+    demoFingerNy: demoFinger?.ny ?? null,
     setKissBackParent,
     kissBackParent,
   };

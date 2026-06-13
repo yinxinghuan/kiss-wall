@@ -33,6 +33,7 @@ export default function KissWall() {
     lifetime, lastSealed,
     history,
     kissBackParent, setKissBackParent,
+    demoFingerNx, demoFingerNy,
   } = useKissWall();
 
   // global tap feedback — one delegated listener, kiss surface opts out via data-no-feedback
@@ -132,6 +133,8 @@ export default function KissWall() {
             epitaph={lastSealed?.epitaph ?? null}
             parentBackdropUrl={isKissBack ? kissBackParent?.parentPortraitUrl ?? null : null}
             ghostKisses={isKissBack ? parentKisses : undefined}
+            demoFingerNx={demoFingerNx}
+            demoFingerNy={demoFingerNy}
           />
 
           {/* Fixed-slot flourish — single line near the top, replaced on

@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Lip } from '../assets/lips';
+import { FingerIcon } from '../assets/icons';
 import type { Kiss } from '../types';
 import { t } from '../i18n';
 
@@ -27,6 +28,9 @@ interface DarkCanvasProps {
   epitaph?: string | null;
   parentBackdropUrl?: string | null;
   ghostKisses?: Kiss[];
+  /** Ghost-finger demo position before first real touch — null hides it. */
+  demoFingerNx?: number | null;
+  demoFingerNy?: number | null;
 }
 
 export function DarkCanvas({
@@ -39,6 +43,8 @@ export function DarkCanvas({
   epitaph,
   parentBackdropUrl,
   ghostKisses,
+  demoFingerNx,
+  demoFingerNy,
 }: DarkCanvasProps) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [now, setNow] = useState(performance.now());
@@ -239,6 +245,17 @@ export function DarkCanvas({
           <Lip variant={k.variant} />
         </div>
       ))}
+
+      {/* ghost-finger demo before first touch */}
+      {!firstTouched && demoFingerNx != null && demoFingerNy != null && (
+        <div
+          className="kw-finger"
+          style={{ left: `${demoFingerNx * 100}%`, top: `${demoFingerNy * 100}%` }}
+          aria-hidden="true"
+        >
+          <FingerIcon size={44} />
+        </div>
+      )}
 
       {!firstTouched && (
         <div className="kw-hint">{hint || t('hint_tap_v2')}</div>
