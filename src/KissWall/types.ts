@@ -1,4 +1,5 @@
 import type { SilhouetteId } from './assets/silhouettes';
+import type { GuestMessage } from '@shared/social/guestbook';
 
 export type { SilhouetteId };
 
@@ -47,6 +48,10 @@ export interface KissWallSave {
   totalSealed: number;
   totalKisses: number;
   history: SealedStele[]; // newest first, capped to 10
+  /** Public guestbook notes this player left on OTHER players' portraits.
+   *  Stored in the sender's own blob (single-blob platform model); displayed
+   *  by best-effort aggregation across readable blobs + reliable notify. */
+  messages?: GuestMessage[];
   _lastActive?: number;
 }
 

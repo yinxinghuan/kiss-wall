@@ -3,7 +3,7 @@ import { DarkCanvas } from './components/DarkCanvas';
 import { WallView } from './components/WallView';
 import { SteleDetail } from './components/SteleDetail';
 import { useKissWall, type KissBackContext } from './hooks/useKissWall';
-import { isSelf } from './hooks/useWall';
+import { isSelf, useWall } from './hooks/useWall';
 import { installGlobalTapFeedback } from './utils/audio';
 import { WallIcon } from './assets/icons';
 import { t } from './i18n';
@@ -34,7 +34,12 @@ export default function KissWall() {
     history,
     kissBackParent, setKissBackParent,
     demoFingerNx, demoFingerNy,
+    myMessages, sendMessage,
   } = useKissWall();
+
+  // One shared wall fetch — feeds both the wall grid AND the detail
+  // guestbook thread (messagesByTarget) off a single get/data/list.
+  const wall = useWall();
 
   // global tap feedback — one delegated listener, kiss surface opts out via data-no-feedback
   useEffect(() => {
@@ -187,6 +192,8 @@ export default function KissWall() {
       {screen === 'wall' && (
         <WallView
           mine={history}
+          cloudEntries={wall.entries}
+          loaded={wall.loaded}
           onBack={() => setScreen('stele')}
           onOpenDetail={(entry) => {
             setDetailEntry(entry);
@@ -199,6 +206,9 @@ export default function KissWall() {
         <SteleDetail
           entry={detailEntry}
           isMine={isSelf(detailEntry)}
+          messagesByTarget={wall.messagesByTarget}
+          myMessages={myMessages}
+          onSendMessage={sendMessage}
           onBack={() => {
             setScreen('wall');
             setDetailEntry(null);

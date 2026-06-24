@@ -92,6 +92,21 @@ export function BackIcon({ size = 18, className }: IconProps) {
   );
 }
 
+export function SendIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <path
+        d="M 4 4 L 20 12 L 4 20 L 6.5 12 Z M 6.5 12 L 14 12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function FingerIcon({ size = 36, className }: IconProps) {
   // Material 'touch_app' (the canonical instant-play hint icon)
   return (

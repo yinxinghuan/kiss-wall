@@ -6,14 +6,20 @@
 // BACK — which opens the kiss-back canvas on top of this portrait. The ♥
 // reaction is kept as a low-friction notify ("breathed beside it").
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Lip } from '../assets/lips';
 import { SilhouetteShape } from '../assets/silhouettes';
-import { BackIcon, BrokenHeartIcon } from '../assets/icons';
-import { openAigramProfile } from '@shared/runtime/bridge';
+import { BackIcon, BrokenHeartIcon, SendIcon } from '../assets/icons';
+import { openAigramProfile, isInAigram, telegramId } from '@shared/runtime/bridge';
 import { useGameEvent } from '@shared/runtime/useGameEvent';
+import {
+  threadFor,
+  cleanText,
+  timeAgo,
+  type GuestMessage,
+} from '@shared/social/guestbook';
 import type { WallEntry } from '../types';
-import { t } from '../i18n';
+import { t, getLocale } from '../i18n';
 
 interface SteleDetailProps {
   entry: WallEntry;
@@ -22,13 +28,42 @@ interface SteleDetailProps {
   /** Open the kiss-back canvas on top of this stele. Hidden when isMine
    *  (you can't kiss your own portrait back). */
   onKissBack?: () => void;
+  /** Best-effort guestbook notes grouped by stele id (from the shared wall
+   *  fetch). */
+  messagesByTarget: Map<string, GuestMessage[]>;
+  /** This player's own outgoing notes (for instant-echo merge). */
+  myMessages: GuestMessage[];
+  /** Leave a public note on this portrait. */
+  onSendMessage: (entry: WallEntry, text: string) => void;
 }
 
-export function SteleDetail({ entry, isMine, onBack, onKissBack }: SteleDetailProps) {
+export function SteleDetail({
+  entry,
+  isMine,
+  onBack,
+  onKissBack,
+  messagesByTarget,
+  myMessages,
+  onSendMessage,
+}: SteleDetailProps) {
   const [hearted, setHearted] = useState(false);
+  const [draft, setDraft] = useState('');
   const event = useGameEvent();
   const portrait = entry.stele.portraitUrl;
   const parent = entry.stele.kissBackOf;
+  const myId = telegramId ? String(telegramId) : undefined;
+
+  const thread = useMemo(
+    () => threadFor(entry.stele.id, messagesByTarget, myMessages, myId),
+    [entry.stele.id, messagesByTarget, myMessages, myId],
+  );
+
+  function send() {
+    const clean = cleanText(draft);
+    if (!clean) return;
+    onSendMessage(entry, clean);
+    setDraft('');
+  }
 
   function heart() {
     if (hearted) return;
@@ -133,6 +168,78 @@ export function SteleDetail({ entry, isMine, onBack, onKissBack }: SteleDetailPr
           >
             {t('kiss_back')}
           </button>
+        )}
+      </div>
+
+      {/* ─── Guestbook: public notes on this portrait ─────────────────── */}
+      <div className="kw-notes">
+        <div className="kw-notes__title">{t('notes_title')}</div>
+
+        {thread.length === 0 && (
+          <div className="kw-notes__empty">{t('notes_empty')}</div>
+        )}
+
+        <div className="kw-notes__list">
+          {thread.map(m => {
+            const mine = !!myId && m.fromUserId === myId;
+            return (
+              <div className="kw-note" key={m.id}>
+                <button
+                  className="kw-note__who"
+                  onClick={(e) => {
+                    if (mine || !m.fromUserId) return;
+                    e.stopPropagation();
+                    openAigramProfile(m.fromUserId);
+                  }}
+                  disabled={mine || !m.fromUserId}
+                >
+                  {mine ? (
+                    <div className="kw-note__avatar kw-note__avatar--me">
+                      {t('notes_you')}
+                    </div>
+                  ) : m.userAvatarUrl ? (
+                    <img className="kw-note__avatar" src={m.userAvatarUrl} alt="" />
+                  ) : (
+                    <div className="kw-note__avatar kw-note__avatar--blank">
+                      {(m.userName ?? '?').slice(0, 1).toUpperCase()}
+                    </div>
+                  )}
+                </button>
+                <div className="kw-note__body">
+                  <div className="kw-note__meta">
+                    <span className="kw-note__name">
+                      {mine ? t('notes_you') : (m.userName ?? 'someone')}
+                    </span>
+                    <span className="kw-note__time">{timeAgo(m.ts, getLocale())}</span>
+                  </div>
+                  <div className="kw-note__text">{m.text}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {isInAigram ? (
+          <div className="kw-notes__compose">
+            <input
+              className="kw-notes__input"
+              value={draft}
+              maxLength={140}
+              placeholder={t('notes_placeholder')}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
+            />
+            <button
+              className="kw-notes__send"
+              onClick={send}
+              disabled={!cleanText(draft)}
+              aria-label={t('notes_send')}
+            >
+              <SendIcon size={18} />
+            </button>
+          </div>
+        ) : (
+          <div className="kw-notes__hint">{t('notes_open_hint')}</div>
         )}
       </div>
     </div>

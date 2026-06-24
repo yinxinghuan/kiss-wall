@@ -17,6 +17,10 @@ import {
   type AigramResponse,
 } from '@shared/runtime/bridge';
 import { getGameUuid } from '@shared/runtime/game-id';
+import {
+  messagesByTarget as buildMessagesByTarget,
+  type GuestMessage,
+} from '@shared/social/guestbook';
 import type { KissWallSave, SealedStele, WallEntry } from '../types';
 
 interface SaveRow {
@@ -27,12 +31,17 @@ interface SaveRow {
 
 export interface UseWall {
   entries: WallEntry[];
+  /** Best-effort guestbook notes grouped by stele id (the artifact target). */
+  messagesByTarget: Map<string, GuestMessage[]>;
   loaded: boolean;
   refresh: () => void;
 }
 
 export function useWall(): UseWall {
   const [entries, setEntries] = useState<WallEntry[]>([]);
+  const [messagesByTarget, setMessagesByTarget] = useState<Map<string, GuestMessage[]>>(
+    () => new Map(),
+  );
   const [loaded, setLoaded] = useState(false);
   const [nonce, setNonce] = useState(0);
 
@@ -72,8 +81,22 @@ export function useWall(): UseWall {
         pairs.sort((a, b) => (b.stele.sealedAt ?? 0) - (a.stele.sealedAt ?? 0));
         const limited = pairs.slice(0, 24);
 
-        // Resolve each unique author's profile once.
-        const uniqueIds = Array.from(new Set(limited.map(p => p.userId)));
+        // Guestbook notes — parsed off the SAME fetch (no second request),
+        // grouped by stele id, each stamped with fromUserId = its owner.
+        const byTarget = buildMessagesByTarget(
+          rows
+            .filter((r): r is { user_id: string; resource_data: string } =>
+              !!r.user_id && !!r.resource_data)
+            .map(r => ({ user_id: r.user_id, resource_data: r.resource_data })),
+        );
+
+        // Resolve each unique author's profile once. Fold in the note authors'
+        // ids too so every guestbook chip can render avatar + name.
+        const idSet = new Set<string>(limited.map(p => p.userId));
+        for (const list of byTarget.values()) {
+          for (const m of list) if (m.fromUserId) idSet.add(m.fromUserId);
+        }
+        const uniqueIds = Array.from(idSet);
         const profileEntries = await Promise.all(
           uniqueIds.map(async uid => {
             try {
@@ -101,8 +124,21 @@ export function useWall(): UseWall {
             stele,
           };
         }));
+
+        // Stamp each note with its author's resolved display fields.
+        const stamped = new Map<string, GuestMessage[]>();
+        for (const [target, list] of byTarget) {
+          stamped.set(
+            target,
+            list.map(m => {
+              const p = m.fromUserId ? profileMap.get(m.fromUserId) || null : null;
+              return { ...m, userName: p?.name, userAvatarUrl: p?.head_url };
+            }),
+          );
+        }
+        setMessagesByTarget(stamped);
       } catch {
-        if (!cancelled) setEntries([]);
+        if (!cancelled) { setEntries([]); setMessagesByTarget(new Map()); }
       } finally {
         if (!cancelled) setLoaded(true);
       }
@@ -110,7 +146,7 @@ export function useWall(): UseWall {
     return () => { cancelled = true; };
   }, [nonce]);
 
-  return { entries, loaded, refresh };
+  return { entries, messagesByTarget, loaded, refresh };
 }
 
 export function isSelf(entry: WallEntry): boolean {

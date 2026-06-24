@@ -731,7 +731,11 @@
   flex-direction: column;
   background: radial-gradient(ellipse at 50% 30%, #11111a 0%, #07070a 78%);
   padding: 0;
-  overflow: hidden;
+  // Scrollable so the guestbook below the portrait is reachable. Contain the
+  // scroll chain so the platform feed doesn't grab the gesture.
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 .kw-detail__head {
   display: flex;
@@ -776,7 +780,11 @@
 }
 .kw-detail__stage {
   position: relative;
-  flex: 1 1 auto;
+  // Fixed-ish height (not flex-grow) so the guestbook section below stays
+  // reachable inside the scrollable detail column.
+  flex: 0 0 auto;
+  height: 52vh;
+  min-height: 280px;
   margin: 4px 18px 0;
   display: flex;
   align-items: center;
@@ -869,6 +877,163 @@
   box-shadow: 0 4px 14px rgba(245, 177, 199, 0.18);
 }
 .kw-reaction.is-active svg { transform: scale(1.08); }
+
+// ───────── Guestbook (notes on a portrait) ──────────────────────────────
+.kw-notes {
+  padding: 4px 18px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.kw-notes__title {
+  font-family: 'Montserrat', system-ui, sans-serif;
+  font-size: 9.5px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: rgba(245, 177, 199, 0.55);
+  text-align: center;
+}
+.kw-notes__empty {
+  text-align: center;
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 14px;
+  color: rgba(240, 238, 219, 0.4);
+  padding: 4px 0 2px;
+}
+.kw-notes__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.kw-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.kw-note__who {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  flex: 0 0 auto;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.kw-note__who:disabled { cursor: default; }
+.kw-note__avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  object-fit: cover;
+  background: rgba(245, 177, 199, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Montserrat', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(240, 238, 219, 0.7);
+  text-transform: uppercase;
+}
+.kw-note__avatar--blank { background: rgba(245, 177, 199, 0.18); }
+.kw-note__avatar--me {
+  background: rgba(245, 177, 199, 0.22);
+  color: @kw-pink;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+.kw-note__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: rgba(245, 177, 199, 0.05);
+  border: 1px solid rgba(245, 177, 199, 0.12);
+  border-radius: 12px;
+  padding: 8px 12px;
+}
+.kw-note__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.kw-note__name {
+  font-family: 'Montserrat', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: @kw-pink;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.kw-note__time {
+  font-family: 'Montserrat', system-ui, sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: rgba(240, 238, 219, 0.35);
+  flex: 0 0 auto;
+}
+.kw-note__text {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 15px;
+  line-height: 1.35;
+  color: @kw-bone;
+  word-break: break-word;
+}
+.kw-notes__compose {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.kw-notes__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  appearance: none;
+  background: rgba(245, 177, 199, 0.05);
+  border: 1px solid rgba(245, 177, 199, 0.2);
+  border-radius: 999px;
+  padding: 11px 16px;
+  color: @kw-bone;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 15px;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.kw-notes__input::placeholder { color: rgba(240, 238, 219, 0.35); }
+.kw-notes__input:focus { border-color: rgba(245, 177, 199, 0.45); }
+.kw-notes__send {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: @kw-pink;
+  border: 0;
+  color: @kw-ink;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 100ms ease, opacity 200ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.kw-notes__send:active { transform: scale(0.92); }
+.kw-notes__send:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.kw-notes__hint {
+  text-align: center;
+  font-family: 'Montserrat', system-ui, sans-serif;
+  font-size: 9.5px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(245, 177, 199, 0.45);
+  padding: 6px 0;
+}
 
 // ───────── Watermark ───────────────────────────────────────────────────
 .kw-watermark {

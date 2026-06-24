@@ -4,7 +4,7 @@
 // debounced cloud save (~1s + RTT) opens.
 
 import { useMemo } from 'react';
-import { useWall, isSelf } from '../hooks/useWall';
+import { isSelf } from '../hooks/useWall';
 import { SteleCard } from './SteleCard';
 import { BackIcon } from '../assets/icons';
 import { openAigramProfile } from '@shared/runtime/bridge';
@@ -15,13 +15,15 @@ interface WallViewProps {
   /** Player's own sealed steles — merged in to surface a just-
    *  sealed stele before cloud sync catches up. */
   mine?: SealedStele[];
+  /** Wall entries + loaded flag, lifted to the parent so the wall and the
+   *  detail thread share one get/data/list fetch. */
+  cloudEntries: WallEntry[];
+  loaded: boolean;
   onBack: () => void;
   onOpenDetail: (entry: WallEntry) => void;
 }
 
-export function WallView({ mine = [], onBack, onOpenDetail }: WallViewProps) {
-  const { entries: cloudEntries, loaded } = useWall();
-
+export function WallView({ mine = [], cloudEntries, loaded, onBack, onOpenDetail }: WallViewProps) {
   // Optimistic merge — own steles first (newest sealedAt anchors
   // them at the top), dedupe by stele.id with cloud, sort the union.
   const entries: WallEntry[] = useMemo(() => {

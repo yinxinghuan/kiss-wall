@@ -18,7 +18,14 @@ import { useGenImage } from '@shared/runtime/useGenImage';
 import { useGameSave } from '@shared/save';
 import { pickSilhouette, type SilhouetteId } from '../assets/silhouettes';
 import { LIP_COUNT } from '../assets/lips';
-import type { Kiss, KissWallSave, SealedStele } from '../types';
+import { telegramId } from '@shared/runtime/bridge';
+import {
+  appendMessage,
+  newMessage,
+  guestbookNotifyConfig,
+  type GuestMessage,
+} from '@shared/social/guestbook';
+import type { Kiss, KissWallSave, SealedStele, WallEntry } from '../types';
 import { clamp, describeDistribution, rand, uuidLike } from '../utils/format';
 import { initAudioOnce, playKiss } from '../utils/audio';
 import { buildPortraitPrompt } from '../utils/prompt';
@@ -87,6 +94,12 @@ interface UseKissWallReturn {
    *  else's portrait. Resetting clears it back to null. */
   setKissBackParent: (parent: KissBackContext | null) => void;
   kissBackParent: KissBackContext | null;
+  /** The player's own outgoing guestbook notes (for instant-echo merge in the
+   *  detail thread). */
+  myMessages: GuestMessage[];
+  /** Leave a public note on another player's portrait. Stores it in this
+   *  player's own blob (full RMW persist) + notifies the portrait's author. */
+  sendMessage: (entry: WallEntry, text: string) => void;
 }
 
 export function useKissWall(): UseKissWallReturn {
@@ -325,7 +338,12 @@ write the epitaph.`;
     };
     setLastSealed(sealed);
 
+    // Full read-modify-write — carry forward every field of the mirror
+    // (notably `messages` + `_lastActive`) so sealing never wipes the
+    // player's guestbook notes. A partial object here would silently drop
+    // them on the next cloud write.
     const next: KissWallSave = {
+      ...(mirror ?? {}),
       totalSealed: (mirror?.totalSealed ?? 0) + 1,
       totalKisses: (mirror?.totalKisses ?? 0) + realKisses.length,
       history: [sealed, ...(mirror?.history ?? [])].slice(0, 10),
@@ -358,6 +376,48 @@ write the epitaph.`;
       });
     }
   }, [bloomed, portraitUrl, epitaph, kissBackParent, silhouette, realKisses, mirror, save, event]);
+
+  // ── Guestbook: leave a note on another player's portrait ────────────────
+  // Notes live in THIS player's own blob (single-blob platform model). We
+  // append + full-RMW persist, then notify the portrait's author once per
+  // artifact per session. Skips self + authorless (self/optimistic) entries.
+  const notedTargetsRef = useRef<Set<string>>(new Set());
+  const sendMessage = useCallback((entry: WallEntry, text: string) => {
+    const targetId = entry.stele.id;
+    const authorId = entry.userId;
+    const isSelfEntry =
+      authorId === 'self' || (!!telegramId && authorId === String(telegramId));
+    const msg = newMessage(targetId, isSelfEntry ? undefined : authorId, text);
+    if (!msg) return;
+
+    setMirror(prev => {
+      const base: KissWallSave = prev ?? { totalSealed: 0, totalKisses: 0, history: [] };
+      const next = appendMessage(base, msg);
+      save.persist(next);
+      return next;
+    });
+
+    // Reliable cross-user delivery: ping the author. Skip self + authorless
+    // (optimistic 'self' wall entries, or entries with no resolved id), and
+    // dedupe per target per session.
+    if (
+      !isSelfEntry &&
+      authorId &&
+      !notedTargetsRef.current.has(targetId)
+    ) {
+      notedTargetsRef.current.add(targetId);
+      event.trigger(
+        'kisswall_note',
+        guestbookNotifyConfig({
+          toUserId: authorId,
+          refUrl: entry.stele.portraitUrl,
+          note: msg.text,
+          template: '{sender_name} left a note on your portrait',
+          imagePrompt: 'Someone left a note on the portrait you sealed.',
+        }),
+      );
+    }
+  }, [save, event]);
 
   // ── Reset for a fresh session ───────────────────────────────────────────
   const reset = useCallback(() => {
@@ -399,6 +459,8 @@ write the epitaph.`;
     demoFingerNy: demoFinger?.ny ?? null,
     setKissBackParent,
     kissBackParent,
+    myMessages: mirror?.messages ?? [],
+    sendMessage,
   };
 }
 
