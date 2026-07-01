@@ -21,6 +21,8 @@ import {
 import type { WallEntry } from '../types';
 import { t, getLocale } from '../i18n';
 
+const ALTERU_APP_URL = 'https://apps.apple.com/app/id6769646546';
+
 interface SteleDetailProps {
   entry: WallEntry;
   isMine: boolean;
@@ -239,7 +241,12 @@ export function SteleDetail({
             </button>
           </div>
         ) : (
-          <div className="kw-notes__hint">{t('notes_open_hint')}</div>
+          <div className="kw-notes__hint kw-notes__download">
+            <span>{t('notes_open_hint')}</span>
+            <a href={ALTERU_APP_URL} target="_blank" rel="noopener noreferrer">
+              {t('download_alteru')}
+            </a>
+          </div>
         )}
       </div>
     </div>
