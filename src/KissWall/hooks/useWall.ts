@@ -12,8 +12,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   callAigramAPI,
-  isInAigram,
-  telegramId,
+  isInAigramNow,
+  getTelegramId,
   type AigramResponse,
 } from '@shared/runtime/bridge';
 import { getGameUuid } from '@shared/runtime/game-id';
@@ -49,7 +49,7 @@ export function useWall(): UseWall {
 
   useEffect(() => {
     const sessionId = getGameUuid();
-    if (!isInAigram || !sessionId) {
+    if (!isInAigramNow() || !sessionId) {
       setLoaded(true);
       return;
     }
@@ -150,5 +150,5 @@ export function useWall(): UseWall {
 }
 
 export function isSelf(entry: WallEntry): boolean {
-  return !!telegramId && entry.userId === String(telegramId);
+  return !!getTelegramId()! && entry.userId === String(getTelegramId()!);
 }

@@ -18,7 +18,7 @@ import { useGenImage } from '@shared/runtime/useGenImage';
 import { useGameSave } from '@shared/save';
 import { pickSilhouette, type SilhouetteId } from '../assets/silhouettes';
 import { LIP_COUNT } from '../assets/lips';
-import { telegramId } from '@shared/runtime/bridge';
+import { getTelegramId } from '@shared/runtime/bridge';
 import {
   appendMessage,
   newMessage,
@@ -386,7 +386,7 @@ write the epitaph.`;
     const targetId = entry.stele.id;
     const authorId = entry.userId;
     const isSelfEntry =
-      authorId === 'self' || (!!telegramId && authorId === String(telegramId));
+      authorId === 'self' || (!!getTelegramId()! && authorId === String(getTelegramId()!));
     const msg = newMessage(targetId, isSelfEntry ? undefined : authorId, text);
     if (!msg) return;
 

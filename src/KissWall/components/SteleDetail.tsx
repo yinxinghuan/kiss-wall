@@ -10,7 +10,7 @@ import { useMemo, useState } from 'react';
 import { Lip } from '../assets/lips';
 import { SilhouetteShape } from '../assets/silhouettes';
 import { BackIcon, BrokenHeartIcon, SendIcon } from '../assets/icons';
-import { openAigramProfile, isInAigram, telegramId } from '@shared/runtime/bridge';
+import { openAigramProfile, isInAigramNow, getTelegramId } from '@shared/runtime/bridge';
 import { useGameEvent } from '@shared/runtime/useGameEvent';
 import {
   threadFor,
@@ -53,7 +53,7 @@ export function SteleDetail({
   const event = useGameEvent();
   const portrait = entry.stele.portraitUrl;
   const parent = entry.stele.kissBackOf;
-  const myId = telegramId ? String(telegramId) : undefined;
+  const myId = getTelegramId()! ? String(getTelegramId()!) : undefined;
 
   const thread = useMemo(
     () => threadFor(entry.stele.id, messagesByTarget, myMessages, myId),
@@ -221,7 +221,7 @@ export function SteleDetail({
           })}
         </div>
 
-        {isInAigram ? (
+        {isInAigramNow() ? (
           <div className="kw-notes__compose">
             <input
               className="kw-notes__input"
