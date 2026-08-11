@@ -2,7 +2,7 @@ type Locale = 'zh' | 'en';
 
 function detectLocale(): Locale {
   try {
-    const override = localStorage.getItem('kiss-wall-locale');
+    const override = alteruLocalStorage.getItem('kiss-wall-locale');
     if (override === 'en' || override === 'zh') return override;
   } catch { /* private mode */ }
   return navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en';
