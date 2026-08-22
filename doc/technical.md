@@ -2,78 +2,41 @@
 
 ## 1. 技术栈
 
-- 游戏：Kiss Wall
-- 类型：social
-- 简述：v2.7 — 纯黑屏幕里藏着一个看不见的形状 — 骸骨 / 解剖心脏 / 古典雕像 / 泪眼 / 伸手 / 玫瑰 / 面纱 / 羽翼 之一，每次随机抽。点中藏的轮廓 → 真实唇印留下 + mwah ASMR；点空地 → 唇印一闪即消。吻得越多形状越浮现。封印 → AI 刻意大利体碑文 → 上传全员碑墙。墙上点别人的碑可看详情 + 三种反应（哀悼/陪坐/献花）。AlterU After Dark 系列。
-- 框架 / 语言 / 构建：React, TypeScript, Vite, Less
-- 渲染方式：Canvas/WebGL
-- 依赖摘录：@types/react@^18.2.0, @types/react-dom@^18.2.0, @vitejs/plugin-react@^4.2.1, less@^4.2.0, react@^18.2.0, react-dom@^18.2.0, typescript@^5.3.3, vite@^5.1.0
-- 平台元信息：meta.title=Kiss Wall；cover_url=/poster.png；category=social；uuid=7a5b620c-b394-4a66-a55a-4739370d3783
+- React 18 + TypeScript + Vite + Less，`base: './'`。
+- React DOM、CSS mask 与位图唇印负责画面；无持续 Canvas/WebGL 主循环。
+- AlterU 平台能力：UUID 存档、公共存档聚合、用户资料、事件通知、LLM 墓志铭和独立媒体服务。
+- 永久游戏 UUID：`7a5b620c-b394-4a66-a55a-4739370d3783`。
 
 ## 2. 目录结构
 
-- `index.html`：Vite/浏览器入口，挂载根节点和基础 meta。
-- `package.json`：定义 npm 脚本、依赖和工程名称。
-- `vite.config.ts`：配置构建、插件和相对路径 base。
-- `meta.json`：平台发布元信息，包含标题和封面。
-- `src/App.tsx`：React 组件和交互界面。
-- `src/main.tsx`：React 组件和交互界面。
-- `src/index.less`：视觉样式、布局、动画和响应式规则。
-- `src/shared.d.ts`：游戏源码模块。
-- `src/vite-env.d.ts`：游戏源码模块。
-- `src/game-id.ts`：游戏源码模块。
-- `src/shared/runtime/useGameStats.ts`：游戏源码模块。
-- `src/shared/runtime/useUpload.ts`：游戏源码模块。
-- `src/shared/runtime/useChat.ts`：游戏源码模块。
-- `src/shared/runtime/useGenImage.ts`：游戏源码模块。
-- `src/shared/runtime/bridge.ts`：游戏源码模块。
-- `src/shared/runtime/game-id.ts`：游戏源码模块。
-- `src/shared/runtime/useGameEvent.ts`：游戏源码模块。
-- `src/shared/runtime/index.ts`：游戏源码模块。
-
-关键源码模块：
-
-- `src/App.tsx`
-- `src/main.tsx`
-- `src/index.less`
-- `src/shared.d.ts`
-- `src/vite-env.d.ts`
-- `src/game-id.ts`
-- `src/shared/runtime/useGameStats.ts`
-- `src/shared/runtime/useUpload.ts`
-- `src/shared/runtime/useChat.ts`
-- `src/shared/runtime/useGenImage.ts`
-- `src/shared/runtime/bridge.ts`
-- `src/shared/runtime/game-id.ts`
-- `src/shared/runtime/useGameEvent.ts`
-- `src/shared/runtime/index.ts`
-- `src/shared/social/guestbook.ts`
-- `src/shared/social/useGuestbook.ts`
-- `src/shared/save/useGameSave.ts`
-- `src/shared/save/index.ts`
-- `src/KissWall/KissWall.tsx`
-- `src/KissWall/types.ts`
-- `src/KissWall/KissWall.less`
-- `src/KissWall/utils/audio.ts`
-- `src/KissWall/utils/prompt.ts`
-- `src/KissWall/utils/format.ts`
+- `src/KissWall/KissWall.tsx`：stele、wall、detail 三屏路由及主 HUD。
+- `src/KissWall/hooks/useKissWall.ts`：吻会话、媒体/墓志铭并发、自动绽开、保存与 kiss-back 通知。
+- `src/KissWall/hooks/useWall.ts`：聚合公共作品、点赞和留言。
+- `src/KissWall/components/DarkCanvas.tsx`：触碰坐标、暗幕遮罩、唇印和揭晓。
+- `src/KissWall/components/WallView.tsx`：公共墙与个人作品列表。
+- `src/KissWall/components/SteleDetail.tsx`：作品详情、作者、反应、留言与 kiss-back。
+- `src/KissWall/utils/prompt.ts`：八种主题、触碰信号和黑白标本 prompt。
+- `src/KissWall/utils/audio.ts`：预分配 WebAudio kiss/UI 音效与触觉反馈。
+- `src/shared/runtime/media.ts`：AlterU 媒体任务、尺寸拟合、轮询和结构化错误。
+- `src/shared/runtime/useGenImage.ts`：512×768 text/edit 选择、幂等请求和一次受控重试。
+- `src/shared/save/useGameSave.ts`：UUID 隔离的本地/平台存档。
 
 ## 3. 核心模块
 
-- 状态管理与主循环：通过 React 状态/引用配合 `requestAnimationFrame` 推进游戏帧。
-- 渲染方式：Canvas/WebGL，样式由 CSS/Less 和组件结构共同完成。
-- 碰撞 / 更新：源码包含命中、距离、边界或重叠判断，结果会影响得分、生命或阶段。
-- 音频：包含程序化音频或音频文件播放，按交互事件触发。
-- 多语言：包含 i18n / locale 检测或 `t()` 文案函数。
-- 存储：使用 localStorage、useGameSave 或 persist 保存分数、收藏、墙数据或本地状态。
-- Aigram 运行时：接入 `@shared/runtime` 或平台桥接能力，用于用户、资料页、分享、通知或平台 API。
-- AI / 生成接口：包含图像生成、视觉识别、ref_url 或 img2img 相关流程。
-- 社交墙 / 归档：包含 wall、gallery、feed 或 archive 数据流与浏览界面。
+- 状态：`useKissWall` 管理主题、吻列表、首触、生成、墓志铭、绽开、父作品和本地存档镜像；refs 防止重复启动生成与重复持久化。
+- 输入：`DarkCanvas` 将 pointer 坐标归一化为 `0–1`；真实吻立即写入状态，演示吻带 `isDemo` 且不进入生成或保存。
+- 媒体：无父图时调用 `mode: text`；kiss-back 以父肖像为唯一 `reference_urls` 调用 `mode: edit`；尺寸固定 512×768，永久 UUID 作为 `session_id`。网络歧义复用 `request_id`，明确可重试错误尊重延迟并只创建一次新请求。
+- 完成：真实吻数达到 12 且媒体结束后，700 ms 定时器触发绽开；成功结果写入最多 10 件历史，失败只显示恢复状态。
+- 社交：公共墙由各用户最新存档合并；详情可打开作者资料、点赞、留言和 kiss-back，跨用户动作经平台事件通知。
+- 音频：首次手势创建 AudioContext 与噪声 buffer；每次 kiss 合成噪声点击与正弦 formant，实时声部最多 8。
+- 多语言：`i18n/index.ts` 提供多语言文案；LLM 墓志铭失败时使用本地英文回退句。
 
 ## 4. 扩展点
 
-- 改玩法参数：优先查找 `src/` 内大写常量、hooks、主组件顶部配置或关卡数组。
-- 换素材：替换 `public/`、`src/img/` 或源码 import 的图片/音频文件，并保持相对路径。
-- 调视觉：修改主样式文件中的颜色、间距、动画时长、网格尺寸和响应式规则。
-- 改文案：修改 i18n 字典、组件内标题按钮文案，保持 zh/en 同步。
-- 加平台能力：在已有 `@shared/runtime`、useGameSave、排行榜、墙或通知调用附近扩展，避免另起一套存储。
+- 调整完成门槛、演示节奏、历史上限或通知：编辑 `hooks/useKissWall.ts`。
+- 调整主题、构图、黑白约束和 kiss-back 保真：编辑 `utils/prompt.ts`。
+- 调整媒体尺寸、模式和重试：编辑 `shared/runtime/useGenImage.ts`；协议位于 `shared/runtime/media.ts`。
+- 调整唇印：替换 `public/lip-*.png` 并同步 `assets/lips.tsx`；保持透明背景和相近边界。
+- 调整画布遮罩与揭晓：编辑 `components/DarkCanvas.tsx` 和 `KissWall.less`。
+- 调整公共墙、留言与资料入口：编辑 `hooks/useWall.ts`、`WallView.tsx` 与 `SteleDetail.tsx`。
+- 调整文案与语言：编辑 `i18n/index.ts`。

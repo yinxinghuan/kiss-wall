@@ -1,20 +1,19 @@
-// Runtime image generation — txt2img / img2img through the platform's HTTPS
-// proxy at https://chat.aiwaves.tech/aigram/api/gen-image.
-//
-// Direct fetch, not the postMessage bridge — this endpoint is anonymous and
-// the platform team explicitly wants game frontends to call it directly.
-//
-// Wall-clock cost is ~200s per image; allow generous UI timeouts.
+// Runtime portrait generation through AlterU's provider-independent media API.
 
 import { useCallback, useState } from 'react';
+import { getGameUuid } from './game-id';
+import {
+  createMediaRequestId,
+  generateImageMedia,
+  MediaServiceError,
+} from './media';
 
-const GEN_IMAGE_URL = 'https://chat.aiwaves.tech/aigram/api/gen-image';
+const GENERATED_IMAGE_SIZE = { width: 512, height: 768 } as const;
 
 export interface GenImageOptions {
-  /** Required. Prompt text. */
+  /** Required English visual prompt. */
   prompt: string;
-  /** Optional. Public HTTPS URL of a reference image. When set, this is an
-   *  img2img call and the output aspect ratio will match the ref's. */
+  /** Optional public HTTPS parent portrait for a kiss-back edit. */
   ref_url?: string;
 }
 
@@ -25,34 +24,58 @@ export interface UseGenImage {
   lastUrl: string | null;
 }
 
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
 export function useGenImage(): UseGenImage {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [lastUrl, setLastUrl] = useState<string | null>(null);
 
   const generate = useCallback(async (opts: GenImageOptions): Promise<string> => {
-    if (!opts.prompt) throw new Error('gen-image: prompt is required');
+    if (!opts.prompt.trim()) throw new Error('gen-image: prompt is required');
+    if (opts.ref_url && !/^https:\/\//i.test(opts.ref_url)) {
+      throw new Error('gen-image: reference must be public HTTPS');
+    }
+    const sessionId = getGameUuid();
+    if (!sessionId) throw new Error('gen-image: game UUID is unavailable');
+
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(GEN_IMAGE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(opts),
-      });
-      if (!res.ok) {
-        throw new Error(`gen-image failed: HTTP ${res.status}`);
+      const request = {
+        sessionId,
+        requestId: createMediaRequestId(),
+        mode: opts.ref_url ? 'edit' as const : 'text' as const,
+        prompt: opts.prompt,
+        referenceUrls: opts.ref_url ? [opts.ref_url] : [],
+        size: GENERATED_IMAGE_SIZE,
+      };
+
+      let task;
+      try {
+        task = await generateImageMedia(request);
+      } catch (cause) {
+        if (cause instanceof MediaServiceError) {
+          if (!cause.retryable) throw cause;
+          await delay(Math.max(1, cause.retryAfterSeconds ?? 1) * 1000);
+          task = await generateImageMedia({
+            ...request,
+            requestId: createMediaRequestId(),
+          });
+        } else {
+          // A network interruption is ambiguous: reuse the same idempotency key.
+          task = await generateImageMedia(request);
+        }
       }
-      const json = (await res.json()) as { url?: string };
-      if (!json.url) {
-        throw new Error('gen-image response had no url');
-      }
-      setLastUrl(json.url);
-      return json.url;
-    } catch (e) {
-      const err = e instanceof Error ? e : new Error(String(e));
-      setError(err);
-      throw err;
+
+      setLastUrl(task.media.url);
+      return task.media.url;
+    } catch (cause) {
+      const nextError = cause instanceof Error ? cause : new Error(String(cause));
+      setError(nextError);
+      throw nextError;
     } finally {
       setLoading(false);
     }

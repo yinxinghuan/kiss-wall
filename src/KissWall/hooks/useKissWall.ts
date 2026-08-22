@@ -160,8 +160,8 @@ export function useKissWall(): UseKissWallReturn {
       parentPortraitUrl: kissBackParent?.parentPortraitUrl,
     });
 
-    // Fire gen-image with one retry. Two attempts buys us through one
-    // transit 500 without sealing a broken stele.
+    // Fire one media request. The shared client owns idempotency and its one
+    // controlled retry, so this hook cannot create a retry storm.
     (async () => {
       const args = {
         prompt: promptInput.prompt,
@@ -170,15 +170,9 @@ export function useKissWall(): UseKissWallReturn {
       try {
         const url = await genImage.generate(args);
         setPortraitUrl(url);
-      } catch (e1) {
-        console.warn('[kiss-wall] gen-image attempt 1 failed, retrying:', e1);
-        try {
-          const url = await genImage.generate(args);
-          setPortraitUrl(url);
-        } catch (e2) {
-          console.error('[kiss-wall] gen-image failed twice:', e2);
-          setPortraitUrl(null);  // failed sentinel
-        }
+      } catch (error) {
+        console.error('[kiss-wall] media generation failed:', error);
+        setPortraitUrl(null);  // failed sentinel
       }
     })();
 
